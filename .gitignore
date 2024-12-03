@@ -4,6 +4,8 @@
 
 # Session Data files
 .RData
+data/*
+Data/*
 .RDataTmp
 
 # User-specific files
