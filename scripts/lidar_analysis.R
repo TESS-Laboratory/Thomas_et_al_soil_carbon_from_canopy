@@ -13,7 +13,7 @@ install.packages("rsi")
 
 library(lidR)
 library(geometry)
-library(raster)
+#library(raster)
 library(terra)
 library(stars)
 library(sp)
@@ -62,7 +62,7 @@ lidar_setup_ctg <- function(
     chunk_buffer = 10,
     crs = NULL,
     .force = FALSE,
-    proc_dir_root = here::here("data")) {
+    proc_dir_root = here::here("Data")) {
  if(!dir.exists(proc_dir_root)) dir.create(proc_dir_root)
    lidar_processing_dir <- create_my_dir(
     file.path(proc_dir_root, proj_name, area_name)
@@ -186,9 +186,9 @@ lidar_build_norm_pnts <- function(laz_ctg, dtm, .force = FALSE) {
   return(norm_ctg)
 }
 
-
-dtm<- lidar_build_dtm(catalog_list[[2]])
-norm<- lidar_build_norm_pnts(catalog_list[[2]], dtm = dtm)
+##Test##
+#dtm<- lidar_build_dtm(catalog_list[[2]])
+#norm<- lidar_build_norm_pnts(catalog_list[[2]], dtm = dtm)
 
 #### functions for  generating metrics #####
 
@@ -197,11 +197,12 @@ grid_rumple_index <- function(las, res) { # user-defined function
   las <- filter_surfacepoints(las, 1)
   return(pixel_metrics(las, rumple_index(X, Y, Z), res))
 }
-ctg <- catalog_list[[3]]
-opt_chunk_buffer(ctg) <- 10
-opt_chunk_alignment(ctg) <- c(100, 200)
-options <- list(raster_alignment = 20)
-metrics <- catalog_map(ctg, grid_rumple_index, res = 20, .options = options)
+##Test##
+#ctg <- catalog_list[[3]]
+#opt_chunk_buffer(ctg) <- 10
+#opt_chunk_alignment(ctg) <- c(100, 200)
+#options <- list(raster_alignment = 20)
+#metrics <- catalog_map(ctg, grid_rumple_index, res = 20, .options = options)
 #plot(metrics, col = height.colors(50))
 
 
@@ -248,10 +249,11 @@ Entropy <- function(las, res) { # user-defined function
   return(pixel_metrics(las, entropy(Z), res))
 }
 
-ctg <- catalog_list[[2]]
-opt_chunk_buffer(ctg) <- 10
-opt_chunk_alignment(ctg) <- c(100, 200)
-options <- list(raster_alignment = 20)
+##Test##
+#ctg <- catalog_list[[2]]
+#opt_chunk_buffer(ctg) <- 10
+#opt_chunk_alignment(ctg) <- c(100, 200)
+#options <- list(raster_alignment = 20)
 #metrics <- catalog_map(ctg, Entropy, res = 20, .options = options)
 #plot(metrics, col = height.colors(50))
 
@@ -259,10 +261,10 @@ VCIfunc <- function(las, res) { # user-defined function
   return(pixel_metrics(las, VCI(Z, zmax= max(Z)), res))
 }
 
-ctg <- catalog_list[[2]]
-opt_chunk_buffer(ctg) <- 10
-opt_chunk_alignment(ctg) <- c(100, 200)
-options <- list(raster_alignment = 20)
+#ctg <- catalog_list[[2]]
+#opt_chunk_buffer(ctg) <- 10
+#opt_chunk_alignment(ctg) <- c(100, 200)
+#options <- list(raster_alignment = 20)
 #metrics <- catalog_map(ctg, VCIfunc, res = 20, .options = options)
 #plot(metrics, col = height.colors(50))
 
@@ -422,97 +424,13 @@ run_everything<- function(laz_ctg){
 } 
   
 
-
+##Test##
 #trial_stack<- run_everything(catalog_list[[2]])
-stack<- terra:: rast(trial_stack)
+#stack<- terra:: rast(trial_stack)
 
-stack_list<-catalog_list%>%
+stack_list<-ctg_list%>%
   map(run_everything)
 
+
+
 #### debgging ####
-
-rumple_func<- function(laz_ctg){
-  opt_chunk_buffer(laz_ctg) <- 5
-  opt_chunk_alignment(laz_ctg) <- c(100, 200)
-  options <- list(raster_alignment = 20)
-  lid_proc_dir <- dirname(laz_ctg@data$filename[1])
-  mod_name <- basename(lid_proc_dir)
-  
-  rump_dir <- file.path(lid_proc_dir, paste0(mod_name, "_rumple"))
-  lidR::opt_output_files(laz_ctg) <- paste(
-    rump_dir,
-    paste0(mod_name, "_rumple_{ID}"),
-    sep = "/"
-  )
-  rump_vrt_check <- file.path(
-    rump_dir,
-    "FUN.vrt"
-  )
-  if (!file.exists(rump_vrt_check)) {
-    cli::cli_alert_info("Creating rumple")
-    rump <- rast(catalog_map(laz_ctg, grid_rumple_index, res = 20, .options = options))
-  } else {
-    cli::cli_alert_info("rumple already exists")
-    rump <- terra::rast(rump_vrt_check)
-  }
-  return(rump)
-}
-
-trial2<- rumple_func(catalog_list[[4]])
-LAD_func<- function(laz_ctg){
-  opt_chunk_buffer(laz_ctg) <- 5
-  opt_chunk_alignment(laz_ctg) <- c(100, 200)
-  options <- list(raster_alignment = 20)
-  lid_proc_dir <- dirname(laz_ctg@data$filename[1])
-  mod_name <- basename(lid_proc_dir)
-  LAD_dir <- file.path(lid_proc_dir, paste0(mod_name, "LAD"))
-  lidR::opt_output_files(laz_ctg) <- paste(
-    LAD_dir,
-    paste0(mod_name, "_LAD_{ID}"),
-    sep = "/"
-  )
-  lad_vrt_check <- file.path(
-    LAD_dir,
-    "pixel_metrics.vrt"
-  )
-  if (!file.exists(lad_vrt_check)) {
-    cli::cli_alert_info("Creating LAD")
-    lad <- pixel_metrics(laz_ctg, ~LADCV(Z), res = 10)
-  } else {
-    cli::cli_alert_info("LAD already exists")
-    lad <- terra::rast(lad_vrt_check)
-  }
-  return(lad)
-}
-
-
-trial<- LAD_func(catalog_list[[2]])
-
-stack<- stack_rasters(list("C:/workspace/PhD year 2/Thesis_work/data/RC/02/02LAD/pixel_metrics.vrt", "C:/workspace/PhD year 2/Thesis_work/data/RC/02/02_rumple/FUN.vrt"), output_filename = "C:/workspace/PhD year 2/Thesis_work/Data/RC/trial_stack.vrt")
-
-nstdmetrics
-las.dir<- "C:/workspace/PhD year 2/datasets/Rio_Cautario_ALS/LiDAR/02.laz"
-
-l<- "10.copc.laz"
-
-
-Laz_ctg<- lidar_setup_ctg(las.dir, area_name = "rondonia", proj_name = "RC")
-
-
-myproject <- readLAScatalog("C:/workspace/PhD year 2/datasets/Rio_Cautario_ALS/LIDAR")
-
-trial<- readLAS("C:/workspace/PhD year 2/datasets/Rio_Cautario_ALS/LiDAR/02.laz", select = "xyz")
-system.time(readLAS("C:/workspace/PhD year 2/datasets/Rio_Cautario_ALS/LiDAR/04.laz", select = "xyz"))
-lidR::plot(trial, color = "Z")
-
-lidar_processing_dir <- file.path(getOption("agbmaptools.proc.dir"), "RC", "rondonia")
-print(lidar_processing_dir)
-cp_dest <- file.path(lidar_processing_dir, basename(las.dir))
-print(cp_dest)
-lidar_processing_dir <- create_my_dir(
-  file.path("C:/workspace/PhD year 2/datasets/Rio_Cautario", "RC", "rondonia")
-)
-
-rumple_map<- pixel_metrics(laz_ctg_1, LAD(Z), res = 20)
-hmean <- pixel_metrics(laz_ctg_1, ~mean(Z), 10)
-plot(hmean)

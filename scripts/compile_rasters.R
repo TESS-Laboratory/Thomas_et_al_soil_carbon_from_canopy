@@ -2,29 +2,57 @@
 
 ### set up envoironment ####
 library(terra)
-library(raster)
 library(rsi)
 
 #### read in data ####
+vrt.folder <- "Data/RC" ##replace with location of vrt files computed by lidar_analysis.R
+tif.folder <-"Data/SoilGrids"  ## Replace with the location of Tiff files (soil grids, rivers, ect)
+output<- "Data/Outputs" ## replace with desired location of output files
 
 ##add in function to read in lidar raster stack
+# Function to list all files in each subfolder of a specified folder
+list_files_by_subfolder <- function(folder_path) {
+  # Get a list of all subfolders within the main folder
+  subfolders <- list.dirs(folder_path, full.names = TRUE, recursive = FALSE)
+  
+  # Initialize a list to store file paths by subfolder
+  files_by_subfolder <- list()
+  
+  # Iterate over each subfolder
+  for (subfolder in subfolders) {
+    # Get a list of all files in the current subfolder
+    files <- list.files(subfolder, full.names = TRUE, pattern = "\\comp.vrt")
+    
+    # Store the files in the list, named by the subfolder path
+    files_by_subfolder[[subfolder]] <- rast(files)
+  }
+  
+  # Return the list of files grouped by subfolder
+  return(files_by_subfolder)
+}
 
-folder_path <-"Data/SoilGrids"  # Replace with the actual folder path
-SG_files <- list.files(path = folder_path, pattern = "\\.tif$", full.names = TRUE)
+
+# Replace with the actual folder path
+nested_files_list <- list_files_by_subfolder(vrt.folder)
+names(nested_files_list)<- NULL
+#### merge rasters ####
+raster_list <- sprc(nested_files_list)  # Read all rasters as stacks
+mos<- mosaic(raster_list, overwrite = TRUE)
+
+
+
+SG_files <- list.files(path = tif.folder, pattern = "\\.tif$", full.names = TRUE)
 
 SG_first<- rast(SG_files[1])
 SG_list <- lapply(SG_files, rast)
 SG_aligned <- lapply(SG_list, resample, y= SG_first, method = "bilinear")
 SG<- rast(SG_aligned)
 
-output<- "Data/output"
-
-#### merge rasters ####
-raster_list <- lapply(stack_list, rast)  # Read all rasters as stacks
-M<- do.call(mosaic, raster_list)
 
 
-mosaic_layers<- rast(M)
+
+
+mosaic_layers<- rast(mos)
 
 # Align CRS
 crs(SG) <- crs(mosaic_layers)
@@ -32,21 +60,7 @@ crs(SG) <- crs(mosaic_layers)
 # Resample target raster to match resolution and extent of reference raster
 aligned_raster <- resample(mosaic_layers, SG, method = "bilinear")
 
-matrics<- c(SG, aligned_raster)
-#metrics<- rsi::stack_rasters(list(SG, mosaic_layers), output_filename = paste0(output, "/metricstack.vrt"))
+metrics<- c(SG, aligned_raster)
 
 
 #### debugging ####
-raster<-raster_list[[3]]
-layer <- raster[[2]]
-band_name <- paste0(names(layer))
-
-# If this is the first time encountering this band name, create an entry in the list
-if (!band_name %in% names(band_layers)) {
-  band_layers[[band_name]] <- layer
-} else {
-    band_layers[[band_name]] <- mosaic(band_layers[[band_name]], layer[[band_name]])
-}
-
-
-R<- mosaic(raster_list[[1]], raster_list[[2]])

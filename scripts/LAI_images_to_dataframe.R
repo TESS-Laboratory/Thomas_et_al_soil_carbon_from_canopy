@@ -15,7 +15,7 @@ library(sf)
 install.packages('gstat')
 library(gstat)
 library(sp)
-library(raster)
+#library(raster)
 
 ################### move data to correct folder ################################
 # Define the source file name (in the working directory)
