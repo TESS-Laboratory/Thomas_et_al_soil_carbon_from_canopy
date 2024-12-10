@@ -1,8 +1,8 @@
-# predicting soil carbon from canopy structure metrics
+## predicting soil carbon from canopy structure metrics
 This repository contains summary data and the analytical codebase of manuscript: 
-## Soil carbon predictions across the landscape using remotely- sensed canopy structure measurements in southern Amazonia 
+# Soil carbon predictions across the landscape using remotely- sensed canopy structure measurements in southern Amazonia 
 
-# contributors: Jessica P. Thomas, Andrew M. Cunliffe, Hugh A. Graham, Tom Powell, Plínio B. Camargo, Ted R. Feldpausch.
+### contributors: Jessica P. Thomas, Andrew M. Cunliffe, Hugh A. Graham, Tom Powell, Plínio B. Camargo, Ted R. Feldpausch.
 
 currently unpublished
 
