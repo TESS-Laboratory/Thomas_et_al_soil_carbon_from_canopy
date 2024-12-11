@@ -16,7 +16,7 @@ To investigate how soil carbon can be predicted using canopy structure metrics, 
 We selected 142 locations for soil sampling (Figure 1), that were within the footprints sampled by the Global Ecosystem Dynamics Investigation (GEDI) sensor and within the airborne lidar coverage. These locations were stratified to sample different forest ages, degradation histories, distance from rivers, and distance to forest edge.
 
 ## This repo contains the following folders: 
-Scripts- where all the scripts used in R to collect, clean and analyse dat ready for the manuscripts
+Scripts- where all the scripts used in R to collect, clean and analyse data
 
 Data- where the raw and output data used in the analysis was stored
 
