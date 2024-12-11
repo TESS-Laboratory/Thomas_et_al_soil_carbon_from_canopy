@@ -102,6 +102,55 @@ filtered_table <- samples_metrics[, sapply(samples_metrics, function(col) length
 formula <- as.formula(paste(response_column, "~ ."))
 glm_model <- glm(X.C~ actual.LAI+ `bdod_0-5cm_mean`, data = filtered_table, family = gaussian)
 FD_glm<- glm()
+
+
+#### PCA Analysis ####
+target_column <- "percC"
+predictor_columns <- setdiff(names(samples_metrics), target_column)  # Exclude "target"
+
+## remove non numeric variables for pca
+numeric_predictors <- sapply(samples_metrics[predictor_columns], as.numeric)  # Check for numeric columns
+numeric_columns <- predictor_columns[numeric_predictors]  # Keep only numeric predictors
+
+# Scale and center the predictor data
+scaled_data <- scale(samples_metrics[numeric_columns])
+
+# Step 2: Perform PCA
+pca_result <- prcomp(scaled_data, center = TRUE, scale. = TRUE)
+
+# Summary of PCA
+summary(pca_result)
+
+# Step 3: Examine Component Contributions
+# Add PCA scores and the target column "x" to a new data frame
+pca_scores <- as.data.frame(pca_result$x)
+pca_scores[[target_column]] <- data[[target_column]]
+
+# Step 4: Analyze Relationship Between Principal Components and x
+# Correlation between each PC and the target column "x"
+correlations <- sapply(pca_scores[, -ncol(pca_scores)], function(pc) cor(pc, pca_scores[[target_column]], use = "complete.obs"))
+print("Correlations between PCs and target column:")
+print(correlations)
+
+# Step 5: Visualize PCA Results
+# Biplot of PCA
+biplot(pca_result, scale = 0)
+
+# Scatter plot of the most influential PCs with "x"
+most_influential_pc <- names(which.max(abs(correlations)))  # Identify the most correlated PC
+ggplot(pca_scores, aes_string(x = most_influential_pc, y = target_column)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "blue") +
+  labs(title = paste("Scatter Plot of", most_influential_pc, "and", target_column),
+       x = most_influential_pc,
+       y = target_column) +
+  theme_minimal()
+
+# Step 6: Assess Variance Explained
+# Proportion of variance explained by each principal component
+variance_explained <- summary(pca_result)$importance[2, ]
+print("Variance Explained by Each PC:")
+print(variance_explained)
 #### all RS data GLM ####
 
 #### only open data GLM ####

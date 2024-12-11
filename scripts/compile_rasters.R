@@ -43,7 +43,7 @@ mos<- mosaic(raster_list, overwrite = TRUE)
 
 SG_files <- list.files(path = tif.folder, pattern = "\\.tif$", full.names = TRUE)
 
-SG_first<- rast(SG_files[1])
+SG_first<- rast(SG_files[2])
 SG_list <- lapply(SG_files, rast)
 SG_aligned <- lapply(SG_list, resample, y= SG_first, method = "bilinear")
 SG<- rast(SG_aligned)
@@ -52,7 +52,7 @@ SG<- rast(SG_aligned)
 
 
 
-mosaic_layers<- rast(mos)
+mosaic_layers<- mos
 
 # Align CRS
 crs(SG) <- crs(mosaic_layers)
