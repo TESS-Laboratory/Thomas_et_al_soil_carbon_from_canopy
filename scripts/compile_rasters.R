@@ -1,13 +1,17 @@
 #### script to stack layers and extract data for models
-
+## make sure all spatial data is in the same resolution or add terra::project to make it so before merging
+#this was performed with epsg:31980
 ### set up envoironment ####
 library(terra)
 library(rsi)
 
+
+
 #### read in data ####
-vrt.folder <- "Data/RC" ##replace with location of vrt files computed by lidar_analysis.R
-tif.folder <-"Data/SoilGrids"  ## Replace with the location of Tiff files (soil grids, rivers, ect)
+vrt.folder <- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/RC" ##replace with location of vrt files computed by lidar_analysis.R
+tif.folder <-"C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data/SoilGrids"  ## Replace with the location of Tiff files (soil grids, rivers, ect)
 output<- "Data/Outputs" ## replace with desired location of output files
+
 
 ##add in function to read in lidar raster stack
 # Function to list all files in each subfolder of a specified folder
@@ -53,7 +57,7 @@ SG<- rast(SG_aligned)
 
 
 mosaic_layers<- mos
-
+#project(SG_first, "epsg:31980")
 # Align CRS
 crs(SG) <- crs(mosaic_layers)
 
