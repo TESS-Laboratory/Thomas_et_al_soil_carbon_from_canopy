@@ -3,6 +3,7 @@
 #### set up environment ####
 #install.packages("performance")
 #install.packages("GGally")
+install.packages("caret")
 library(terra)
 library(ggplot2)
 library(GLMMRR)
@@ -11,14 +12,15 @@ library(performance)
 library(GGally)
 library(sf)
 library(tidyverse)
+library(fastDummies)
 
 #### read in data ####
-metrics<- rast("Data/combined_metrics_raster.tif")
+metrics<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif")
 samples<- read_csv("Data/soil_meta_table.csv")
 biomass<-rast("Data/lidar_agb_pred_test_with_zerosV5-0.tif")
-rivers<- rast("Data/Outputs/distance_to_water.tif")
-NDVI_var<- rast("Data/NDVI_var.tif")
-NDVI_grad<- rast("Data/NDVI_grad.tif")
+rivers<- rast("Data/distance_to_water.tif")
+NDVI_var<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/NDVI_var.tif")
+NDVI_grad<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/NDVI_grad.tif")
 #### extract data points ####
 # combine observed data
 set.ext(biomass, ext(metrics))
@@ -109,8 +111,9 @@ target_column <- "percC"
 predictor_columns <- setdiff(names(samples_metrics), target_column)  # Exclude "target"
 
 ## remove non numeric variables for pca
-numeric_predictors <- sapply(samples_metrics[predictor_columns], as.numeric)  # Check for numeric columns
+numeric_predictors <- sapply(samples_metrics[predictor_columns], is.numeric())  # Check for numeric columns
 numeric_columns <- predictor_columns[numeric_predictors]  # Keep only numeric predictors
+data_encoded <- dummy_cols(data, select_columns = "", remove_first_dummy = TRUE, remove_selected_columns = TRUE)
 
 # Scale and center the predictor data
 scaled_data <- scale(samples_metrics[numeric_columns])
