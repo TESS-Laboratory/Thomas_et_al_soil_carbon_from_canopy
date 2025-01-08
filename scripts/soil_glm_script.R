@@ -3,7 +3,8 @@
 #### set up environment ####
 #install.packages("performance")
 #install.packages("GGally")
-install.packages("caret")
+#install.packages("fastDummies")
+#install.packages("vegan")
 library(terra)
 library(ggplot2)
 library(GLMMRR)
@@ -13,6 +14,7 @@ library(GGally)
 library(sf)
 library(tidyverse)
 library(fastDummies)
+library(vegan)
 
 #### read in data ####
 metrics<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif")
@@ -73,7 +75,9 @@ clean_headers <- function(df) {
 }
 
 # Apply the function to the sample data frame
-samples_metrics <- clean_headers(merged_spatial_df)
+samples_metrics <- clean_headers(merged_spatial_df)%>%
+  select(-...1, -Local, -notes, -"Identifier1", -massa, -Ponto, -Age_rectified, -Age.category)
+
 # Create a formula for the GLM where the response column is modeled by all other columns
 pairplot <- GGally::ggpairs(samples_metrics, columns = c(2:111, 114, 117:141), cardinality_threshold = 50)
 pairplot <- GGally::ggpairs(samples_metrics, columns = c(132:133,136:140, 120), cardinality_threshold = 50)
@@ -107,56 +111,36 @@ FD_glm<- glm()
 
 
 #### PCA Analysis ####
-target_column <- "percC"
-predictor_columns <- setdiff(names(samples_metrics), target_column)  # Exclude "target"
 
-## remove non numeric variables for pca
-numeric_predictors <- sapply(samples_metrics[predictor_columns], is.numeric())  # Check for numeric columns
-numeric_columns <- predictor_columns[numeric_predictors]  # Keep only numeric predictors
-data_encoded <- dummy_cols(data, select_columns = "", remove_first_dummy = TRUE, remove_selected_columns = TRUE)
+## subset columns for numerical variables
 
-# Scale and center the predictor data
-scaled_data <- scale(samples_metrics[numeric_columns])
+metrics_num <- samples_metrics[,c("bdod_0.5cm_mean","cec_0.5cm_mean",
+                        "clay_0.5cm_mean","nitrogen_0.5cm_mean","ocs_0.30cm_mean" ,
+                        "phh2o_0.5cm_mean",
+                        "sand_0.5cm_mean","soc_0.5cm_mean", "rump", "LAD","GF",
+                        "ent","VCI",  "zmean", "HydroRiver_raster", "NDVI_variance",
+                        "15N","percN","13C", "percC", "CperN", "effective.LAI",          
+                        "actual.LAI","clumping.index",         
+                        "LXG1", "MTA", "canopy.openness", "min_distance", "Degradation", "Profundidade_cm_")]
 
-# Step 2: Perform PCA
-pca_result <- prcomp(scaled_data, center = TRUE, scale. = TRUE)
+metrics_num$Degradation<- as.factor(metrics_num$Degradation)
+metrics_num$Profundidade_cm_<- as.factor(metrics_num$Profundidade_cm_)
+metrics_num<-data.frame(metrics_num)
+metrics_num<- na.omit(metrics_num)
 
-# Summary of PCA
-summary(pca_result)
+## filter for deapths we are interested in
+Fmetrics_num<- filter(metrics_num, Profundidade_cm_ == "0-5" | Profundidade_cm_ =="5-10"| Profundidade_cm_== "10-20" | Profundidade_cm_ == "20-30"  )
 
-# Step 3: Examine Component Contributions
-# Add PCA scores and the target column "x" to a new data frame
-pca_scores <- as.data.frame(pca_result$x)
-pca_scores[[target_column]] <- data[[target_column]]
-
-# Step 4: Analyze Relationship Between Principal Components and x
-# Correlation between each PC and the target column "x"
-correlations <- sapply(pca_scores[, -ncol(pca_scores)], function(pc) cor(pc, pca_scores[[target_column]], use = "complete.obs"))
-print("Correlations between PCs and target column:")
-print(correlations)
-
-# Step 5: Visualize PCA Results
-# Biplot of PCA
-biplot(pca_result, scale = 0)
-
-# Scatter plot of the most influential PCs with "x"
-most_influential_pc <- names(which.max(abs(correlations)))  # Identify the most correlated PC
-ggplot(pca_scores, aes_string(x = most_influential_pc, y = target_column)) +
-  geom_point() +
-  geom_smooth(method = "lm", color = "blue") +
-  labs(title = paste("Scatter Plot of", most_influential_pc, "and", target_column),
-       x = most_influential_pc,
-       y = target_column) +
-  theme_minimal()
-
-# Step 6: Assess Variance Explained
-# Proportion of variance explained by each principal component
-variance_explained <- summary(pca_result)$importance[2, ]
-print("Variance Explained by Each PC:")
-print(variance_explained)
-#### all RS data GLM ####
-
-#### only open data GLM ####
-
-#### Debugging ####
-ggpairs()
+## plot without categorical data 
+rda.out <- vegan::rda(Fmetrics_num[,-c(29,30,31)], scale = TRUE)
+# add scores()
+rda_scores <- scores(rda.out)
+# add biplot()
+biplot(rda.out, type = "text")
+## group by depth ### this doesnt work yet
+ordihull(rda.out,
+         group = Fmetrics_num$Profundidade_cm_,
+         col = 1:11,
+         lty = 1:11,
+         lwd = c(3,6), 
+         label = TRUE)
