@@ -30,6 +30,7 @@ library(mlr3filters)
 library(FSelectorRcpp)
 library(mlr3fselect)
 
+
 #### read in data ####
 metrics<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif")
 samples<- read_csv("Data/soil_meta_table.csv")
@@ -162,7 +163,7 @@ ordihull(rda.out,
          label = TRUE)
 
 
-#####  mlr3 ecosystem #####
+#####  mlr3 ecosystem trial #####
 
 ##convert datatable to a task (must remove geometry)
 non_sf<-samples_metrics%>%
@@ -184,7 +185,7 @@ convert_to_numeric_or_factor <- function(df) {
 # Apply the conversion function
 converted_data <- convert_to_numeric_or_factor(non_sf)
 
-T_metrics<- as_task_regr(converted_data, target = "percC",
+T_metrics= as_task_regr(converted_data, target = "percC",
                          id = "soils")
 mlr3viz::autoplot(T_metrics, type = "pairs")
 
