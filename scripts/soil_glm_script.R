@@ -5,6 +5,13 @@
 #install.packages("GGally")
 #install.packages("fastDummies")
 #install.packages("vegan")
+#install.packages("mlr3")
+#install.packages("mlr3viz")
+#install.packages("mlr3learners")
+#install.packages("ranger")
+#install.packages("mlr3filters")
+#install.packages("FSelectorRcpp")
+#install.packages("mlr3fselect")
 library(terra)
 library(ggplot2)
 library(GLMMRR)
@@ -15,6 +22,13 @@ library(sf)
 library(tidyverse)
 library(fastDummies)
 library(vegan)
+library(mlr3)
+library(mlr3viz)
+library(mlr3learners)
+library(ranger)
+library(mlr3filters)
+library(FSelectorRcpp)
+library(mlr3fselect)
 
 #### read in data ####
 metrics<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif")
@@ -76,7 +90,9 @@ clean_headers <- function(df) {
 
 # Apply the function to the sample data frame
 samples_metrics <- clean_headers(merged_spatial_df)%>%
-  select(-...1, -Local, -notes, -"Identifier1", -massa, -Ponto, -Age_rectified, -Age.category)
+  select(-...1, -Local, -notes, -"Identifier1", -massa, -Ponto, -Age_rectified, -Age.category,-...15)
+samples_metrics <- samples_metrics %>%
+  rename_with(~ ifelse(grepl("^\\d", .), paste0("x", .), .))
 
 # Create a formula for the GLM where the response column is modeled by all other columns
 pairplot <- GGally::ggpairs(samples_metrics, columns = c(2:111, 114, 117:141), cardinality_threshold = 50)
@@ -144,3 +160,81 @@ ordihull(rda.out,
          lty = 1:11,
          lwd = c(3,6), 
          label = TRUE)
+
+
+#####  mlr3 ecosystem #####
+
+##convert datatable to a task (must remove geometry)
+non_sf<-samples_metrics%>%
+  st_drop_geometry()%>%
+  select(!"Codigo")
+
+## make everything numeric or factor
+convert_to_numeric_or_factor <- function(df) {
+  df %>%
+    mutate(across(everything(), ~ {
+      if (suppressWarnings(all(!is.na(as.numeric(.))))) {
+        as.numeric(.)
+      } else {
+        as.factor(.)
+      }
+    }))
+}
+
+# Apply the conversion function
+converted_data <- convert_to_numeric_or_factor(non_sf)
+
+T_metrics<- as_task_regr(converted_data, target = "percC",
+                         id = "soils")
+mlr3viz::autoplot(T_metrics, type = "pairs")
+
+## training model
+# create a regression tree learner
+#any seed will do. just for consistency
+set.seed(42)
+#ranger is Random forests
+trial_learner<-lrn("regr.ranger")
+#dummy learner
+lrn_featureless = lrn("regr.featureless")
+
+#feature selection
+flt_gain = flt("information_gain")
+flt_gain$calculate(T_metrics)
+variables_by_information_gain<-as.data.table(flt_gain)
+
+T_metrics$select(c("LAD", "clay_0.5cm_mean", "ent",
+                 "nitrogen_0.5cm_mean"))
+instance = fselect(
+  fselector = fs("sequential"),
+  task =  T_metrics,
+  learner = trial_learner,
+  resampling = rsmp("cv", folds = 3),
+  measure = msr("regr.mae")
+)
+dt = as.data.table(instance$archive)
+dt[batch_nr == 1, 1:5]## in this example nitrogen is the top variable
+autoplot(instance, type = "performance") ## all 4 contribute something but best is 2 levels
+dt[batch_nr == 2, 1:5] ##LAD is 2nd most important in this example 
+instance$result_feature_set ##alphabetical not best performing, but only prints the best ones (which in this case is all)
+
+## split data to train and test-- holdout method
+splits = partition(T_metrics)
+#train
+lrn_featureless$train(T_metrics, splits$train)
+trial_learner$train(T_metrics, splits$train)
+trial_learner$train(T_metrics, row_ids = splits$train)
+#predict
+prediction = trial_learner$predict(T_metrics, row_ids = splits$test)
+prediction
+autoplot(prediction)
+
+##measure model accuracy with mean absolute error
+measures = msrs(c("regr.mse", "regr.mae"))
+trial_learner$predict(T_metrics, row_ids = splits$test)$score(measures)
+lrn_featureless$predict(T_metrics, row_ids = splits$test)$score(measures)
+
+
+##https://mlr3book.mlr-org.com/chapters/chapter2/data_and_basic_modeling.html
+##start here with 2.6 for column task roles 
+##3.2.1 Constructing a Resampling Strategy
+##3.3.1 BENCHMARKING!! important
