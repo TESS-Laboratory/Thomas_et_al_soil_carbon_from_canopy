@@ -24,12 +24,12 @@ colnames(converted_data)<-make.names(colnames(converted_data))
 
 ##Create a task for each data type level  
 tsk_all_data = as_task_regr(converted_data, target = "percC",
-                               id = "soils")
+                               id = "soils_all")
 tsk_all_data$set_col_roles("Profundidade_cm_", roles = "group")
 RS_data_subset<- converted_data%>% select(-"x15N",-"percN",-"x13C",-"CperN", -"effective.LAI",-"actual.LAI", -"clumping.index",
                                            -"LXG1",-"LXG2",-"MTA",-"canopy.openness",-"light.conditions")
 tsk_RS_data = as_task_regr(RS_data_subset, target = "percC",
-                            id = "soils")
+                            id = "soils_RS")
 tsk_RS_data$set_col_roles("Profundidade_cm_", roles = "group")
 FA_data_subset<- converted_data%>% select("bdod_0.5cm_mean", "bdod_5.15cm_mean","bdod_15.30cm_mean",      
                                           "bdod_30.60cm_mean","bdod_60.100cm_mean","bdod_100.200cm_mean","cec_0.5cm_mean",         
@@ -45,7 +45,7 @@ FA_data_subset<- converted_data%>% select("bdod_0.5cm_mean", "bdod_5.15cm_mean",
                                           "HydroRiver_raster", "NDVI_variance",           "Profundidade_cm_","Age" ,"State",
                                           "Degradation" , "plot.x" ,                 "plot.y" ,                 "min_distance", "percC", "Profundidade_cm_")
 tsk_FA_data = as_task_regr(FA_data_subset, target = "percC",
-                           id = "soils")
+                           id = "soils_FA")
 tsk_FA_data$set_col_roles("Profundidade_cm_", roles = "group")
 
 ## feature selection 
@@ -99,7 +99,7 @@ tsk_RS_data$select(RS_keep)
 tsk_FA_data$select(FA_keep)
 
 ## use benchmark to compare learners
-tasks = tsks(c("tsk_all_data", "tsk_RS_data", "tsk_FA_data"))
+tasks = c(tsk_all_data, tsk_RS_data, tsk_FA_data)
 learners = lrns(c("regr.ranger", "regr.featureless"), predict_type = "response")
 rsmp_ho = rsmp("holdout")
 
