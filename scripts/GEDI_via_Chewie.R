@@ -10,6 +10,15 @@ library(mapview)
 chewie_creds() # to set up your credentials
 chewie_health_check() # to check your credentials and cache setup.
 
+### set up extraction parameters ####
+metrics<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif")
+samples<- read_csv("Data/soil_meta_table.csv")
+coordinates <- vect(samples[, c("plot.x", "plot.y", "Codigo")], geom = c("plot.x", "plot.y"), crs = "EPSG:4326")
+
+#align coordinates to rasters
+proj<- crs(metrics)
+coordinates <- project(coordinates, proj, partial = TRUE)
+
 ## search for gedi data ####
 RC_Boundary <- sf::st_read("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Rio_Cautario/RC_boundary_EPSG4326/RC_boundary_EPSG4326.shp", crs = 4326
 )
@@ -26,13 +35,37 @@ chewie_show(
   zoom = 8
 )
 
-gedi_2B_sf <- grab_gedi(gedi_2a_search) |>
+gedi_2B_sf <- grab_gedi(gedi_2B_search) |>
   filter(
-    quality_flag == 1,
-    degrade_flag == 0
+    l2a_quality_flag == 1,
+    l2b_quality_flag == 1,
+    degrade_flag == 0,
+    dplyr::between(sensitivity, 0.98, 1.0) # upped from 0.9 to 0.98
   ) |>
-  select(
-    beam, date_time, lat_lowestmode, lon_lowestmode, elev_highestreturn,
-    elev_lowestmode, rh0, rh25, rh50, rh75, rh95, rh100
+  dplyr::select(
+    shot_number,
+    date_time,
+    cover,
+    fhd_normal,
+    pai,
+    pgap_theta,
+    rv,
+    dplyr::starts_with("cover_z"),
+    dplyr::starts_with("pai_z"),
+    dplyr::starts_with("pavd_z"),
+    lat_lowestmode,
+    lon_lowestmode,
   ) |>
-  collect_gedi(gedi_find = gedi_2a_search)
+  collect_gedi(gedi_find = gedi_2B_search)
+
+
+chewie_show(
+  gedi_2B_sf,
+  zcol = "pai",
+  zoom = 8,
+  alpha = 0.5,
+  aoi_color = "white"
+)
+Gedi_repro<- st_transform(gedi_2B_sf, crs = proj)
+extracted_values <- st_join(coordinates, Gedi_repro,join= st_nearest_feature, bind = TRUE)
+st_write(extracted_values, "Data/Gedi_2b_dataframe.csv")
