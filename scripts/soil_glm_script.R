@@ -34,10 +34,16 @@ library(mlr3fselect)
 #### read in data ####
 metrics<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif")
 samples<- read_csv("Data/soil_meta_table.csv")
+GEDI<- read_csv("Data/Gedi_2b_dataframe.csv")
+colnames(GEDI) <- paste0(colnames(GEDI), "_FA")
 biomass<-rast("Data/lidar_agb_pred_test_with_zerosV5-0.tif")
+names(biomass) <- paste0(names(biomass), "_RS")
 rivers<- rast("Data/distance_to_water.tif")
+names(rivers) <- paste0(names(rivers), "_FA")
 NDVI_var<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/NDVI_var.tif")
+names(NDVI_var) <- paste0(names(NDVI_var), "_FA")
 NDVI_grad<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/NDVI_grad.tif")
+names(NDVI_grad) <- paste0(names(NDVI_grad), "_FA")
 #### extract data points ####
 # combine observed data
 set.ext(biomass, ext(metrics))
@@ -45,10 +51,10 @@ set.ext(rivers, ext(metrics))
 set.ext(NDVI_grad, ext(metrics))
 set.ext(NDVI_var, ext(metrics))
 
-biomass <- resample(biomass, metrics, method = "bilinear")
-rivers <- resample(rivers, metrics, method = "bilinear")
-NDVI_var <- resample(NDVI_var, metrics, method = "bilinear")
-NDVI_grad <- resample(NDVI_grad, metrics, method = "bilinear")
+biomass <- terra::resample(biomass, metrics, method = "bilinear")
+rivers <- terra::resample(rivers, metrics, method = "bilinear")
+NDVI_var <- terra::resample(NDVI_var, metrics, method = "bilinear")
+NDVI_grad <- terra::resample(NDVI_grad, metrics, method = "bilinear")
 
 l_metrics<- c(metrics, biomass, rivers, NDVI_grad, NDVI_var)
 
@@ -67,17 +73,13 @@ spatial_df <- st_as_sf(extracted_values)
 
 # Bind the columns from the original samples table to the spatial data frame
 merged_spatial_df <- spatial_df %>%
-  left_join(samples, by = "Codigo") # Use other joins like inner_join if needed
-
-# Print a summary of the merged spatial data frame
-print(head(merged_spatial_df))
-
-# Optional: Save the merged spatial data frame to a new shapefile or GeoJSON
-#output_path <- "path/to/output/merged_vector.geojson"
-#st_write(merged_spatial_df, output_path, delete_dsn = TRUE)
+  left_join(samples, by = "Codigo")
 
 
-#### full data GLM ####
+  rename_with(~ paste0(., "_FA"), .cols = setdiff(names(spatial_df), "Codigo"))
+st_geometry(merged_spatial_df) <- "geometry_FA"
+  left_join(GEDI, by = "Codigo")
+
 # clean table headers
 clean_headers <- function(df) {
   clean_names <- gsub("[[:space:]]", "", colnames(df))  # Remove all spaces
@@ -95,6 +97,9 @@ samples_metrics <- clean_headers(merged_spatial_df)%>%
 samples_metrics <- samples_metrics %>%
   rename_with(~ ifelse(grepl("^\\d", .), paste0("x", .), .))
 
+st_write(samples_metrics, "Data/soil_samples_w_complete_metrics.shp", delete_dsn= TRUE, layer_options = "GEOMETRY=AS_XY")
+
+####prelim analysis #####
 # Create a formula for the GLM where the response column is modeled by all other columns
 pairplot <- GGally::ggpairs(samples_metrics, columns = c(2:111, 114, 117:141), cardinality_threshold = 50)
 pairplot <- GGally::ggpairs(samples_metrics, columns = c(132:133,136:140, 120), cardinality_threshold = 50)

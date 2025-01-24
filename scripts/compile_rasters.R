@@ -49,9 +49,9 @@ SG_files <- list.files(path = tif.folder, pattern = "\\.tif$", full.names = TRUE
 
 SG_first<- rast(SG_files[2])
 SG_list <- lapply(SG_files, rast)
-SG_aligned <- lapply(SG_list, resample, y= SG_first, method = "bilinear")
+SG_aligned <- lapply(SG_list, terra::resample, y= SG_first, method = "bilinear")
 SG<- rast(SG_aligned)
-
+names(SG) <- paste0(names(SG), "_FA")
 
 
 
@@ -60,9 +60,10 @@ mosaic_layers<- mos
 #project(SG_first, "epsg:31980")
 # Align CRS
 crs(SG) <- crs(mosaic_layers)
+names(mosaic_layers) <- paste0(names(mosaic_layers), "_RS")
 
 # Resample target raster to match resolution and extent of reference raster
-aligned_raster <- resample(mosaic_layers, SG, method = "bilinear")
+aligned_raster <- terra::resample(mosaic_layers, SG, method = "bilinear")
 
 metrics<- c(SG, aligned_raster)
 

@@ -1,5 +1,5 @@
 set.seed(42)
-
+samples_metrics<- read_csv("Data/soil_samples_w_complete_metrics.csv")
 ##drop useless columns
 non_sf<-samples_metrics%>%
   st_drop_geometry()%>%
