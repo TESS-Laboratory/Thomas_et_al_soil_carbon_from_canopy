@@ -12,6 +12,9 @@
 #install.packages("mlr3filters")
 #install.packages("FSelectorRcpp")
 #install.packages("mlr3fselect")
+#install.packages("mlr3pipelines")
+#install.packages("praznik")
+library(scales)
 library(terra)
 library(ggplot2)
 library(GLMMRR)
@@ -29,6 +32,10 @@ library(ranger)
 library(mlr3filters)
 library(FSelectorRcpp)
 library(mlr3fselect)
+library(mlr3filters)
+library(mlr3pipelines)
+library(praznik)
+
 
 
 #### read in data ####

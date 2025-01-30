@@ -69,17 +69,57 @@ tsk_FA_data = as_task_regr_st(FA_data_subset, target = "wmean_percC",
 #tsk_FA_data$set_col_roles("Profundidade_cm_", roles = "group")
 
 ## feature selection 
-#TODO create a feature selection sandwich
-all_flt_gain = flt("information_gain")
-RS_flt_gain = flt("information_gain")
-FA_flt_gain = flt("information_gain")
+#TODO create a feature selection sandwich 
+# Define filters to use
+# Define function to select top-ranked features
+select_top_features <- function(task, n_top = 30) {
+  
+  # Define filters to use
+  filters <- c("jmim", "mrmr", "cmim")
+  
+  # Apply each filter and store results
+  filter_results <- lapply(filters, function(flt_name) {
+    filter <- flt(flt_name)   # Initialize filter
+    filter$calculate(task)    # Compute scores
+    data.frame(feature = names(filter$scores), 
+               score = rescale(filter$scores), # Normalize scores (0-1)
+               filter = flt_name)
+  })
+  
+  # Combine results into one table
+  all_scores <- bind_rows(filter_results)
+  
+  # Aggregate scores (mean score across filters)
+  final_ranking <- all_scores %>%
+    group_by(feature) %>%
+    summarise(agg_score = mean(score)) %>%
+    arrange(desc(agg_score))  # Rank from highest to lowest
+  
+  # Select top `n_top` ranked features
+  top_features <- final_ranking %>%
+    slice_head(n = min(n_top, nrow(final_ranking))) %>%  # Avoid exceeding available features
+    pull(feature)  # Extract feature names
+  
+  # Keep only the selected features + target variable
+  filtered_data <- task$select(top_features)
+  
+  # Return list with selected features and filtered dataset
+  return(list(
+    selected_features = top_features,
+    filtered_data = filtered_data
+  ))
+}
 
-all_IG<- all_flt_gain$calculate(tsk_all_data)
-as.data.table(all_IG)
-RS_IG<-RS_flt_gain$calculate(tsk_RS_data)
-as.data.table(RS_IG)
-FA_IG<-FA_flt_gain$calculate(tsk_FA_data)
-as.data.table(FA_IG)
+# Example usage on the iris dataset
+
+
+# Apply function to select top 3 features (for demonstration)
+all_result <- select_top_features(tsk_all_data, n_top = 30)
+RS_result<-select_top_features(tsk_RS_data, n_top = 30)
+FA_result<- select_top_features(tsk_FA_data, n_top = 30)
+# Print selected features
+print(all_result$selected_features)
+
 
 #TODO hyper parameter tuning spaces hughs or defaults or chat 
 #TODO set up work in pipeline 
