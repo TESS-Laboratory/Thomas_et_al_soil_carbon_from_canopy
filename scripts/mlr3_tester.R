@@ -1,14 +1,48 @@
+install.packages("mlr3spatiotempcv")
+library(mlr3spatiotempcv)
 set.seed(42)
-samples_metrics<- read_csv("Data/soil_samples_w_complete_metrics.csv")
-##drop useless columns
-non_sf<-samples_metrics%>%
-  st_drop_geometry()%>%
-  select(c(-"Codigo", -"n", -"GEDI.footprints",-"id_clean" ))
+samples_metrics<- read_sf("Data/soil_samples_w_complete_metrics.fgb")
+## take averages for soil depth
+weighted_mean_func <- function(x, w) {
+  if (is.numeric(x)) {
+    return(weighted.mean(x, w, na.rm = TRUE))
+  } else {
+    return(NA)  # Placeholder for non-numeric columns
+  }
+}
 
-## make everything numeric or factor
+# Define a function to calculate mode
+get_mode <- function(x) {
+  unique_x <- unique(x)
+  unique_x[which.max(tabulate(match(x, unique_x)))]
+}
+
+# Compute weights: "yes" = 2, "no" = 1
+samples_metrics <- samples_metrics %>%
+  mutate(weight = ifelse(Profundidade_cm_ == "10-20"| Profundidade_cm_ == "20-30", 2, 1))
+
+# Summarize table
+summary_df <- samples_metrics %>%
+  group_by(Codigo) %>%
+  summarise(
+    across(where(is.numeric), ~ weighted_mean_func(., weight), .names = "wmean_{.col}"),
+    across(where(is.character) & !all_of("Profundidade_cm_"), get_mode, .names = "mode_{.col}"),
+    .groups = "drop"
+  )
+
+# Remove weight column from summary
+summary_df <- summary_df %>%
+  select(-contains("weight"))
+
+##drop useless columns
+non_sf<-summary_df%>%
+  #st_drop_geometry()%>%
+  select(!dplyr::any_of(c("Codigo", "wmean_n_RS", "wmean_GEDI.footprints","wmean_id_clean","mode_date_time_FA" )))
+
+## make everything numeric or factor ##
 convert_to_numeric_or_factor <- function(df) {
   df %>%
-    mutate(across(everything(), ~ {
+    mutate(across(1:last_col(1), ~ {
       if (suppressWarnings(all(!is.na(as.numeric(.))))) {
         as.numeric(.)
       } else {
@@ -18,46 +52,37 @@ convert_to_numeric_or_factor <- function(df) {
 }
 converted_data <- convert_to_numeric_or_factor(non_sf)
 ##make sure headers work in mlr3 ecosystem
+#converted_data<- non_sf
 colnames(converted_data)<-make.names(colnames(converted_data))
 
 ###sort out incomplete rows
 
 ##Create a task for each data type level  
-tsk_all_data = as_task_regr(converted_data, target = "percC",
+tsk_all_data = as_task_regr_st(converted_data, target = "wmean_percC",
                                id = "soils_all")
-tsk_all_data$set_col_roles("Profundidade_cm_", roles = "group")
-RS_data_subset<- converted_data%>% select(-"x15N",-"percN",-"x13C",-"CperN", -"effective.LAI",-"actual.LAI", -"clumping.index",
-                                           -"LXG1",-"LXG2",-"MTA",-"canopy.openness",-"light.conditions")
-tsk_RS_data = as_task_regr(RS_data_subset, target = "percC",
+RS_data_subset<- converted_data%>% select(ends_with("_RS"), (ends_with("_FA")), wmean_percC)
+tsk_RS_data = as_task_regr_st(RS_data_subset, target = "wmean_percC",
                             id = "soils_RS")
-tsk_RS_data$set_col_roles("Profundidade_cm_", roles = "group")
-FA_data_subset<- converted_data%>% select("bdod_0.5cm_mean", "bdod_5.15cm_mean","bdod_15.30cm_mean",      
-                                          "bdod_30.60cm_mean","bdod_60.100cm_mean","bdod_100.200cm_mean","cec_0.5cm_mean",         
-                                          "cec_5.15cm_mean","cec_15.30cm_mean","cec_30.60cm_mean","cec_60.100cm_mean",      
-                                          "cec_100.200cm_mean","clay_0.5cm_mean","clay_5.15cm_mean","clay_15.30cm_mean",     
-                                          "clay_30.60cm_mean","clay_60.100cm_mean","clay_100.200cm_mean","nitrogen_0.5cm_mean",    
-                                          "nitrogen_5.15cm_mean", "nitrogen_15.30cm_mean","nitrogen_30.60cm_mean","nitrogen_60.100cm_mean", 
-                                          "nitrogen_100.200cm_mean", "ocs_0.30cm_mean","phh2o_0.5cm_mean","phh2o_5.15cm_mean",     
-                                          "phh2o_15.30cm_mean","phh2o_30.60cm_mean","phh2o_60.100cm_mean","phh2o_100.200cm_mean",  
-                                          "sand_0.5cm_mean","sand_5.15cm_mean" ,       "sand_15.30cm_mean"   ,    "sand_30.60cm_mean",      
-                                          "sand_60.100cm_mean"   ,   "sand_100.200cm_mean"   ,  "soc_0.5cm_mean"  ,        "soc_5.15cm_mean" ,       
-                                          "soc_15.30cm_mean"  ,      "soc_30.60cm_mean"    ,    "soc_60.100cm_mean"   ,    "soc_100.200cm_mean",
-                                          "HydroRiver_raster", "NDVI_variance",           "Profundidade_cm_","Age" ,"State",
-                                          "Degradation" , "plot.x" ,                 "plot.y" ,                 "min_distance", "percC", "Profundidade_cm_")
-tsk_FA_data = as_task_regr(FA_data_subset, target = "percC",
+FA_data_subset<- converted_data%>% select((ends_with("_FA")), wmean_percC)
+tsk_FA_data = as_task_regr_st(FA_data_subset, target = "wmean_percC",
                            id = "soils_FA")
-tsk_FA_data$set_col_roles("Profundidade_cm_", roles = "group")
+#tsk_FA_data$set_col_roles("Profundidade_cm_", roles = "group")
 
 ## feature selection 
+#TODO create a feature selection sandwich
 all_flt_gain = flt("information_gain")
 RS_flt_gain = flt("information_gain")
 FA_flt_gain = flt("information_gain")
+
 all_IG<- all_flt_gain$calculate(tsk_all_data)
 as.data.table(all_IG)
 RS_IG<-RS_flt_gain$calculate(tsk_RS_data)
 as.data.table(RS_IG)
 FA_IG<-FA_flt_gain$calculate(tsk_FA_data)
 as.data.table(FA_IG)
+
+#TODO hyper parameter tuning spaces hughs or defaults or chat 
+#TODO set up work in pipeline 
 
 
 RF_learner<-lrn("regr.ranger")

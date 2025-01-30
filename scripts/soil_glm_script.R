@@ -36,6 +36,7 @@ metrics<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_D
 samples<- read_csv("Data/soil_meta_table.csv")
 GEDI<- read_csv("Data/Gedi_2b_dataframe.csv")
 colnames(GEDI) <- paste0(colnames(GEDI), "_FA")
+GEDI<-rename(GEDI, Codigo = Codigo_FA)
 biomass<-rast("Data/lidar_agb_pred_test_with_zerosV5-0.tif")
 names(biomass) <- paste0(names(biomass), "_RS")
 rivers<- rast("Data/distance_to_water.tif")
@@ -73,11 +74,9 @@ spatial_df <- st_as_sf(extracted_values)
 
 # Bind the columns from the original samples table to the spatial data frame
 merged_spatial_df <- spatial_df %>%
-  left_join(samples, by = "Codigo")
-
-
-  rename_with(~ paste0(., "_FA"), .cols = setdiff(names(spatial_df), "Codigo"))
-st_geometry(merged_spatial_df) <- "geometry_FA"
+  left_join(samples, by = "Codigo")%>%
+  #rename_with(~ paste0(., "_FA"), .cols = setdiff(names(spatial_df), "Codigo"))
+#st_geometry(merged_spatial_df) <- "geometry_FA_FA"
   left_join(GEDI, by = "Codigo")
 
 # clean table headers
@@ -97,7 +96,7 @@ samples_metrics <- clean_headers(merged_spatial_df)%>%
 samples_metrics <- samples_metrics %>%
   rename_with(~ ifelse(grepl("^\\d", .), paste0("x", .), .))
 
-st_write(samples_metrics, "Data/soil_samples_w_complete_metrics.shp", delete_dsn= TRUE, layer_options = "GEOMETRY=AS_XY")
+st_write(samples_metrics, "Data/soil_samples_w_complete_metrics.fgb", delete_dsn= TRUE)
 
 ####prelim analysis #####
 # Create a formula for the GLM where the response column is modeled by all other columns
