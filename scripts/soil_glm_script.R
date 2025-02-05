@@ -14,6 +14,7 @@
 #install.packages("mlr3fselect")
 #install.packages("mlr3pipelines")
 #install.packages("praznik")
+#install.packages("mlr3tuningspaces")
 library(scales)
 library(terra)
 library(ggplot2)
@@ -35,6 +36,7 @@ library(mlr3fselect)
 library(mlr3filters)
 library(mlr3pipelines)
 library(praznik)
+library(mlr3tuningspaces)
 
 
 
