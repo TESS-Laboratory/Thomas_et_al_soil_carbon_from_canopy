@@ -317,3 +317,11 @@ head(design)
 bmr = benchmark(design)
 bmr$score()
 
+summary_table <- table %>%
+  group_by(nr) %>%
+  summarise(
+    across(where(is.numeric), mean, .names = "wmean_{.col}"),
+    across(where(is.character), get_mode, .names = "mode_{.col}"),
+    .groups = "drop"
+  )
+

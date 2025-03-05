@@ -51,7 +51,7 @@ SG_first<- rast(SG_files[2])
 SG_list <- lapply(SG_files, rast)
 SG_aligned <- lapply(SG_list, terra::resample, y= SG_first, method = "bilinear")
 SG<- rast(SG_aligned)
-names(SG) <- paste0(names(SG), "_FA")
+names(SG) <- paste0(names(SG), "_1")
 
 
 
@@ -60,7 +60,7 @@ mosaic_layers<- mos
 #project(SG_first, "epsg:31980")
 # Align CRS
 crs(SG) <- crs(mosaic_layers)
-names(mosaic_layers) <- paste0(names(mosaic_layers), "_RS")
+names(mosaic_layers) <- paste0(names(mosaic_layers), "_3")
 
 # Resample target raster to match resolution and extent of reference raster
 aligned_raster <- terra::resample(mosaic_layers, SG, method = "bilinear")

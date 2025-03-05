@@ -1,5 +1,5 @@
 ####################### script to look at hemishphere R package 
-
+### make this script better for calling locations and adding correct sub names
 ####################### Environemnt set up #########################
 install.packages("hemispheR")
 library(hemispheR)
@@ -126,17 +126,19 @@ CImage.data.clean<- CImage.data %>%
 
 #################### Merge dataframes and export a copy #######################
 combined_table <- rbind(Image.data.clean, CImage.data.clean)
+colnames(combined_table) <- paste0(colnames(combined_table), "_4")
+colnames(combined_table$GEDI.footprints_4) <- paste0("GEDI.footprints")
 combined_table<- combined_table %>%
   mutate(ID = gsub("X", "",ID))%>%
   mutate(GEDI.footprints = gsub("GEDI", "",ID))%>%
   mutate(GEDI.footprints = sub("\\..*", "", GEDI.footprints))
 
 #export
-write.csv(combined_table, file = "LAI_table.csv")
+write.csv(combined_table, file = "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data/LAI_table.csv")
 
 ################### combine with plot metadata #####################
 #import meta data
-combined_table<- read.csv("LAI_table.csv")
+combined_table<- read.csv("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data/LAI_table.csv")
 GEDI_meta_data<- read.csv('Field_GEDI_plots.csv')
 GEDI_meta_data$GEDI.footprints[!is.na(GEDI_meta_data$Plot)] <- GEDI_meta_data$Plot[!is.na(GEDI_meta_data$Plot)]
 #remove sensors because they aren't included here
