@@ -42,11 +42,11 @@ library(mlr3tuningspaces)
 
 #### read in data ####
 metrics<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif")
-update(x, names=TRUE)
+#update(x, names=TRUE)
 samples<- read_csv("Data/soil_meta_table.csv")
 GEDI<- read_csv("Data/Gedi_2b_dataframe.csv")
 colnames(GEDI) <- paste0(colnames(GEDI), "_2")
-GEDI<-rename(GEDI, Codigo = Codigo_FA)
+GEDI<-rename(GEDI, Codigo = Codigo_2)
 biomass<-rast("Data/lidar_agb_pred_test_with_zerosV5-0.tif")
 names(biomass) <- paste0(names(biomass), "_3")
 rivers<- rast("Data/distance_to_water.tif")
@@ -102,7 +102,7 @@ clean_headers <- function(df) {
 
 # Apply the function to the sample data frame
 samples_metrics <- clean_headers(merged_spatial_df)%>%
-  select(-...1, -Local, -notes, -"Identifier1", -massa, -Ponto, -Age_rectified, -Age.category,-...15)
+  select(-...1, -Local, -notes, -"Identifier1", -massa, -Ponto, -...15)
 samples_metrics <- samples_metrics %>%
   rename_with(~ ifelse(grepl("^\\d", .), paste0("x", .), .))
 

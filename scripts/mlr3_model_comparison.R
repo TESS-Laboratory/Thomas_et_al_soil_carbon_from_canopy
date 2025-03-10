@@ -1,5 +1,7 @@
 # Load required libraries
 library(mlr3)
+library(patchwork)
+library(mlr3spatiotempcv)
 library(mlr3learners)
 library(mlr3filters)
 library(mlr3tuning)
@@ -10,6 +12,7 @@ library(dplyr)
 library(scales)
 library(mlr3fselect)
 install.packages("genalg")
+library(genalg)
 future::plan("multisession", workers = 5)
 
 #### set up tasks ####
@@ -32,25 +35,25 @@ get_mode <- function(x) {
 
 # Compute weights: "yes" = 2, "no" = 1
 samples_metrics <- samples_metrics %>%
-  mutate(weight = ifelse(Profundidade_cm_ == "10-20"| Profundidade_cm_ == "20-30", 2, 1))
+  mutate(weight = ifelse(Profundidade_cm__5 == "10-20"| Profundidade_cm__5 == "20-30", 2, 1))
 
 # Summarize table
 summary_df <- samples_metrics %>%
   group_by(Codigo) %>%
   summarise(
     across(where(is.numeric), ~ weighted_mean_func(., weight), .names = "wmean_{.col}"),
-    across(where(is.character) & !all_of("Profundidade_cm_"), get_mode, .names = "mode_{.col}"),
+    across(where(is.character) & !all_of("Profundidade_cm__5"), get_mode, .names = "mode_{.col}"),
     .groups = "drop"
   )
 
 # Remove weight column from summary
 summary_df <- summary_df %>%
-  select(-contains("weight"))
+  select(-contains(c("weight", "CperN")))
 
 ##drop useless columns
 non_sf<-summary_df%>%
   #st_drop_geometry()%>%
-  select(!dplyr::any_of(c("Codigo", "wmean_n_RS", "wmean_GEDI.footprints","wmean_id_clean","mode_date_time_FA" )))
+  select(!dplyr::any_of(c("Codigo", "wmean_n_3", "wmean_GEDI.footprints","wmean_id_clean","mode_date_time_FA" )))
 
 ## make everything numeric or factor ##
 convert_to_numeric_or_factor <- function(df) {
@@ -72,18 +75,17 @@ colnames(converted_data)<-make.names(colnames(converted_data))
 
 ###sort out incomplete rows
 
-##Create a task for each data type level  
-tsk_all_data = as_task_regr_st(converted_data, target = "wmean_percC",
-                               id = "soils_all")
+
+
 
 
 ### encoding ####
 
 ##Create a task for each data type level  
-tsk_all_data = as_task_regr_st(converted_data, target = "wmean_percC",
-                               id = "soils_all")
+tsk_S1 = as_task_regr_st(converted_data, target = "wmean_percC_5",
+                         id = "sim_1")
 poe = po("encode")
-encoded_tsk = poe$train(list(tsk_all_data))[[1]]
+encoded_tsk = poe$train(list(tsk_S1))[[1]]
 
 #### feature selection ####
 instance = fsi(
@@ -183,17 +185,16 @@ dot_plot2 <- function(x, labs = NULL, dot_alpha = 0.01, ...) {
 
 P_all<-dot_plot2(resampling_instance, dot_alpha = 0.9)
 
+##### repeat for sim 1 #####
 
-##### repeat for RS data #####
 
-##Create a task for each data type level  
-RS_data_subset<- converted_data%>% select(ends_with("_RS"), (ends_with("_FA")), wmean_percC)
-tsk_RS_data = as_task_regr_st(RS_data_subset, target = "wmean_percC",
-                              id = "soils_RS")
+S1_data_subset<- converted_data%>% select(ends_with("_1"),  wmean_percC_5)
+tsk_S1 = as_task_regr_st(S1_data_subset, target = "wmean_percC_5",
+                         id = "sim_1")
 poe = po("encode")
-encoded_tsk = poe$train(list(tsk_RS_data))[[1]]
+encoded_tsk = poe$train(list(tsk_S1))[[1]]
 
-#### feature selection ####
+## feature selection ##
 instance = fsi(
   task = encoded_tsk,
   learner = lrn("regr.xgboost"),
@@ -208,14 +209,14 @@ fselector = fs("genetic_search")
 # Run feature selection
 progressr::with_progress(fselector$optimize(instance))
 
-RS_Vars<-instance$result$features
+S1_Vars<-instance$result$features
 ## create new feature
 task_st_filter <- encoded_tsk$clone(deep = TRUE)
 task_st_filter$select(
   instance$result$features[[1]]
 )
 
-#### HPO #####
+## HPO ##
 tuning_instance <- ti(
   task = task_st_filter,
   learner = lrn("regr.xgboost"),
@@ -229,31 +230,31 @@ tuner = tnr("mbo")
 
 progressr::with_progress(tuner$optimize(tuning_instance))
 
-#### tuned learner ####
+## tuned learner ##
 tuned_learner = lrn("regr.xgboost")
 tuned_learner$param_set$set_values(.values= tuning_instance$result_learner_param_vals)
 
-task_st_filter_RS <- task_st_filter$clone(deep = TRUE)
-#### resampling instance and plot  #####
+task_st_filter_S1 <- task_st_filter$clone(deep = TRUE)
+## resampling instance and plot  ##
 resampling_instance = mlr3::resample(
-  task= task_st_filter_RS,
+  task= task_st_filter_S1,
   learner = tuned_learner,
   resampling = rsmp("spcv_coords", folds = 30))
 
 
-P_RS<-dot_plot2(resampling_instance, dot_alpha = 0.9)
+P_S1<-dot_plot2(resampling_instance, dot_alpha = 0.9)
 
 
-##### repeat for FA data #####
+##### repeat for sim 2 #####
 
-##Create a task for each data type level  
-FA_data_subset<- converted_data%>% select((ends_with("_FA")), wmean_percC)
-tsk_FA_data = as_task_regr_st(FA_data_subset, target = "wmean_percC",
-                              id = "soils_FA")
+ 
+S2_data_subset<- converted_data%>% select(ends_with(c("_1", "_2")), wmean_percC_5)
+tsk_S2 = as_task_regr_st(S2_data_subset, target = "wmean_percC_5",
+                              id = "sim_2")
 poe = po("encode")
-encoded_tsk = poe$train(list(tsk_FA_data))[[1]]
+encoded_tsk = poe$train(list(tsk_S2))[[1]]
 
-#### feature selection ####
+## feature selection ##
 instance = fsi(
   task = encoded_tsk,
   learner = lrn("regr.xgboost"),
@@ -268,14 +269,14 @@ fselector = fs("genetic_search")
 # Run feature selection
 progressr::with_progress(fselector$optimize(instance))
 
-FA_vars<-instance$result$features
+S2_Vars<-instance$result$features
 ## create new feature
 task_st_filter <- encoded_tsk$clone(deep = TRUE)
 task_st_filter$select(
   instance$result$features[[1]]
 )
 
-#### HPO #####
+## HPO ##
 tuning_instance <- ti(
   task = task_st_filter,
   learner = lrn("regr.xgboost"),
@@ -289,39 +290,428 @@ tuner = tnr("mbo")
 
 progressr::with_progress(tuner$optimize(tuning_instance))
 
-#### tuned learner ####
+## tuned learner ##
 tuned_learner = lrn("regr.xgboost")
 tuned_learner$param_set$set_values(.values= tuning_instance$result_learner_param_vals)
 
-task_st_filter_FA <- task_st_filter$clone(deep = TRUE)
-#### resampling instance and plot  #####
+task_st_filter_S2 <- task_st_filter$clone(deep = TRUE)
+## resampling instance and plot  ##
 resampling_instance = mlr3::resample(
-  task= task_st_filter_FA,
+  task= task_st_filter_S2,
   learner = tuned_learner,
   resampling = rsmp("spcv_coords", folds = 30))
 
 
-P_FA<-dot_plot2(resampling_instance, dot_alpha = 0.9)
-#### play around with benchmarking #####
+P_S2<-dot_plot2(resampling_instance, dot_alpha = 0.9)
 
-P_all
-P_RS
-P_FA
+##### repeat for sim 3 #####
 
-tasks = c(task_st_filter_FA, task_st_filter_RS, task_st_filter_all)
-learners = lrns(c("regr.xgboost", "regr.featureless"), predict_type = "response")
-rsmp_ho = rsmp("spcv_coords", folds = 30)
 
-design = benchmark_grid(tasks, learners, rsmp_ho)
-head(design)
-bmr = benchmark(design)
-bmr$score()
+S3_data_subset<- converted_data%>% select(ends_with(c("_3")), wmean_percC_5)
+tsk_S3 = as_task_regr_st(S3_data_subset, target = "wmean_percC_5",
+                         id = "sim_3")
+poe = po("encode")
+encoded_tsk = poe$train(list(tsk_S3))[[1]]
 
-summary_table <- table %>%
-  group_by(nr) %>%
-  summarise(
-    across(where(is.numeric), mean, .names = "wmean_{.col}"),
-    across(where(is.character), get_mode, .names = "mode_{.col}"),
-    .groups = "drop"
-  )
+## feature selection ##
+instance = fsi(
+  task = encoded_tsk,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 32),
+  measures = msr("regr.rmse"), ## multiple measures works for multicrit but try tpo evaluate different things 
+  terminator = trm("evals", n_evals = 100)
+)
 
+# Choose optimization algorithm
+fselector = fs("genetic_search")
+
+# Run feature selection
+progressr::with_progress(fselector$optimize(instance))
+
+S3_Vars<-instance$result$features
+## create new feature
+task_st_filter <- encoded_tsk$clone(deep = TRUE)
+task_st_filter$select(
+  instance$result$features[[1]]
+)
+
+## HPO ##
+tuning_instance <- ti(
+  task = task_st_filter,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 30),
+  measure = msr("regr.rmse"),
+  search_space = lts("regr.xgboost.default"),  # Corrected argument name
+  terminator = trm("evals", n_evals = 100)  # Define termination criterion
+)
+
+tuner = tnr("mbo")
+
+progressr::with_progress(tuner$optimize(tuning_instance))
+
+## tuned learner ##
+tuned_learner = lrn("regr.xgboost")
+tuned_learner$param_set$set_values(.values= tuning_instance$result_learner_param_vals)
+
+task_st_filter_S3 <- task_st_filter$clone(deep = TRUE)
+## resampling instance and plot  ##
+resampling_instance = mlr3::resample(
+  task= task_st_filter_S3,
+  learner = tuned_learner,
+  resampling = rsmp("spcv_coords", folds = 30))
+
+
+P_S3<-dot_plot2(resampling_instance, dot_alpha = 0.9)
+
+##### repeat for sim 4 #####
+
+
+S4_data_subset<- converted_data%>% select(ends_with(c("_5")), wmean_percC_5)
+tsk_S4 = as_task_regr_st(S4_data_subset, target = "wmean_percC_5",
+                         id = "sim_4")
+poe = po("encode")
+encoded_tsk = poe$train(list(tsk_S4))[[1]]
+
+## feature selection ##
+instance = fsi(
+  task = encoded_tsk,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 32),
+  measures = msr("regr.rmse"), ## multiple measures works for multicrit but try tpo evaluate different things 
+  terminator = trm("evals", n_evals = 100)
+)
+
+# Choose optimization algorithm
+fselector = fs("genetic_search")
+
+# Run feature selection
+progressr::with_progress(fselector$optimize(instance))
+
+S4_Vars<-instance$result$features
+## create new feature
+task_st_filter <- encoded_tsk$clone(deep = TRUE)
+task_st_filter$select(
+  instance$result$features[[1]]
+)
+
+## HPO ##
+tuning_instance <- ti(
+  task = task_st_filter,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 30),
+  measure = msr("regr.rmse"),
+  search_space = lts("regr.xgboost.default"),  # Corrected argument name
+  terminator = trm("evals", n_evals = 100)  # Define termination criterion
+)
+
+tuner = tnr("mbo")
+
+progressr::with_progress(tuner$optimize(tuning_instance))
+
+## tuned learner ##
+tuned_learner = lrn("regr.xgboost")
+tuned_learner$param_set$set_values(.values= tuning_instance$result_learner_param_vals)
+
+task_st_filter_S4 <- task_st_filter$clone(deep = TRUE)
+## resampling instance and plot  ##
+resampling_instance = mlr3::resample(
+  task= task_st_filter_S4,
+  learner = tuned_learner,
+  resampling = rsmp("spcv_coords", folds = 30))
+
+
+P_S4<-dot_plot2(resampling_instance, dot_alpha = 0.9)
+
+##### repeat for sim 5 #####
+
+
+S5_data_subset<- converted_data%>% select(ends_with(c("_4", "_5")), wmean_percC_5)
+tsk_S5 = as_task_regr_st(S5_data_subset, target = "wmean_percC_5",
+                         id = "sim_5")
+poe = po("encode")
+encoded_tsk = poe$train(list(tsk_S5))[[1]]
+
+## feature selection ##
+instance = fsi(
+  task = encoded_tsk,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 32),
+  measures = msr("regr.rmse"), ## multiple measures works for multicrit but try tpo evaluate different things 
+  terminator = trm("evals", n_evals = 100)
+)
+
+# Choose optimization algorithm
+fselector = fs("genetic_search")
+
+# Run feature selection
+progressr::with_progress(fselector$optimize(instance))
+
+S5_Vars<-instance$result$features
+## create new feature
+task_st_filter <- encoded_tsk$clone(deep = TRUE)
+task_st_filter$select(
+  instance$result$features[[1]]
+)
+
+## HPO ##
+tuning_instance <- ti(
+  task = task_st_filter,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 30),
+  measure = msr("regr.rmse"),
+  search_space = lts("regr.xgboost.default"),  # Corrected argument name
+  terminator = trm("evals", n_evals = 100)  # Define termination criterion
+)
+
+tuner = tnr("mbo")
+
+progressr::with_progress(tuner$optimize(tuning_instance))
+
+## tuned learner ##
+tuned_learner = lrn("regr.xgboost")
+tuned_learner$param_set$set_values(.values= tuning_instance$result_learner_param_vals)
+
+task_st_filter_S5 <- task_st_filter$clone(deep = TRUE)
+## resampling instance and plot  ##
+resampling_instance = mlr3::resample(
+  task= task_st_filter_S5,
+  learner = tuned_learner,
+  resampling = rsmp("spcv_coords", folds = 30))
+
+
+P_S5<-dot_plot2(resampling_instance, dot_alpha = 0.9)
+
+##### repeat for sim 6 #####
+
+
+S6_data_subset<- converted_data%>% select(ends_with(c("_1", "_5")), wmean_percC_5)
+tsk_S6 = as_task_regr_st(S6_data_subset, target = "wmean_percC_5",
+                         id = "sim_6")
+poe = po("encode")
+encoded_tsk = poe$train(list(tsk_S6))[[1]]
+
+## feature selection ##
+instance = fsi(
+  task = encoded_tsk,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 32),
+  measures = msr("regr.rmse"), ## multiple measures works for multicrit but try tpo evaluate different things 
+  terminator = trm("evals", n_evals = 100)
+)
+
+# Choose optimization algorithm
+fselector = fs("genetic_search")
+
+# Run feature selection
+progressr::with_progress(fselector$optimize(instance))
+
+S6_Vars<-instance$result$features
+## create new feature
+task_st_filter <- encoded_tsk$clone(deep = TRUE)
+task_st_filter$select(
+  instance$result$features[[1]]
+)
+
+## HPO ##
+tuning_instance <- ti(
+  task = task_st_filter,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 30),
+  measure = msr("regr.rmse"),
+  search_space = lts("regr.xgboost.default"),  # Corrected argument name
+  terminator = trm("evals", n_evals = 100)  # Define termination criterion
+)
+
+tuner = tnr("mbo")
+
+progressr::with_progress(tuner$optimize(tuning_instance))
+
+## tuned learner ##
+tuned_learner = lrn("regr.xgboost")
+tuned_learner$param_set$set_values(.values= tuning_instance$result_learner_param_vals)
+
+task_st_filter_S6 <- task_st_filter$clone(deep = TRUE)
+## resampling instance and plot  ##
+resampling_instance = mlr3::resample(
+  task= task_st_filter_S6,
+  learner = tuned_learner,
+  resampling = rsmp("spcv_coords", folds = 30))
+
+
+P_S6<-dot_plot2(resampling_instance, dot_alpha = 0.9)
+
+##### repeat for sim 7 #####
+
+
+S7_data_subset<- converted_data%>% select(ends_with(c("_1", "_2", "_4", "_5")), wmean_percC_5)
+tsk_S7 = as_task_regr_st(S7_data_subset, target = "wmean_percC_5",
+                         id = "sim_7")
+poe = po("encode")
+encoded_tsk = poe$train(list(tsk_S7))[[1]]
+
+##feature selection ##
+instance = fsi(
+  task = encoded_tsk,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 32),
+  measures = msr("regr.rmse"), ## multiple measures works for multicrit but try tpo evaluate different things 
+  terminator = trm("evals", n_evals = 100)
+)
+
+# Choose optimization algorithm
+fselector = fs("genetic_search")
+
+# Run feature selection
+progressr::with_progress(fselector$optimize(instance))
+
+S7_Vars<-instance$result$features
+## create new feature
+task_st_filter <- encoded_tsk$clone(deep = TRUE)
+task_st_filter$select(
+  instance$result$features[[1]]
+)
+
+## HPO ##
+tuning_instance <- ti(
+  task = task_st_filter,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 30),
+  measure = msr("regr.rmse"),
+  search_space = lts("regr.xgboost.default"),  # Corrected argument name
+  terminator = trm("evals", n_evals = 100)  # Define termination criterion
+)
+
+tuner = tnr("mbo")
+
+progressr::with_progress(tuner$optimize(tuning_instance))
+
+## tuned learner ##
+tuned_learner = lrn("regr.xgboost")
+tuned_learner$param_set$set_values(.values= tuning_instance$result_learner_param_vals)
+
+task_st_filter_S7 <- task_st_filter$clone(deep = TRUE)
+## resampling instance and plot  ##
+resampling_instance = mlr3::resample(
+  task= task_st_filter_S7,
+  learner = tuned_learner,
+  resampling = rsmp("spcv_coords", folds = 30))
+
+
+P_S7<-dot_plot2(resampling_instance, dot_alpha = 0.9)
+
+##### repeat for sim 8 #####
+
+
+S8_data_subset<- converted_data%>% select(ends_with(c("_3", "_4", "_5")), wmean_percC_5)
+tsk_S8 = as_task_regr_st(S8_data_subset, target = "wmean_percC_5",
+                         id = "sim_8")
+poe = po("encode")
+encoded_tsk = poe$train(list(tsk_S8))[[1]]
+
+## feature selection ##
+instance = fsi(
+  task = encoded_tsk,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 32),
+  measures = msr("regr.rmse"), ## multiple measures works for multicrit but try tpo evaluate different things 
+  terminator = trm("evals", n_evals = 100)
+)
+
+# Choose optimization algorithm
+fselector = fs("genetic_search")
+
+# Run feature selection
+progressr::with_progress(fselector$optimize(instance))
+
+S8_Vars<-instance$result$features
+## create new feature
+task_st_filter <- encoded_tsk$clone(deep = TRUE)
+task_st_filter$select(
+  instance$result$features[[1]]
+)
+
+## HPO ##
+tuning_instance <- ti(
+  task = task_st_filter,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 30),
+  measure = msr("regr.rmse"),
+  search_space = lts("regr.xgboost.default"),  # Corrected argument name
+  terminator = trm("evals", n_evals = 100)  # Define termination criterion
+)
+
+tuner = tnr("mbo")
+
+progressr::with_progress(tuner$optimize(tuning_instance))
+
+## tuned learner ##
+tuned_learner = lrn("regr.xgboost")
+tuned_learner$param_set$set_values(.values= tuning_instance$result_learner_param_vals)
+
+task_st_filter_S8 <- task_st_filter$clone(deep = TRUE)
+## resampling instance and plot  ##
+resampling_instance = mlr3::resample(
+  task= task_st_filter_S8,
+  learner = tuned_learner,
+  resampling = rsmp("spcv_coords", folds = 30))
+
+
+P_S8<-dot_plot2(resampling_instance, dot_alpha = 0.9)
+
+##### repeat for sim 9 #####
+
+
+tsk_S9 = as_task_regr_st(converted_data, target = "wmean_percC_5",
+                         id = "sim_9")
+poe = po("encode")
+encoded_tsk = poe$train(list(tsk_S9))[[1]]
+
+# feature selection #
+instance = fsi(
+  task = encoded_tsk,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 32),
+  measures = msr("regr.rmse"), ## multiple measures works for multicrit but try tpo evaluate different things 
+  terminator = trm("evals", n_evals = 100)
+)
+
+# Choose optimization algorithm
+fselector = fs("genetic_search")
+
+# Run feature selection
+progressr::with_progress(fselector$optimize(instance))
+
+S9_Vars<-instance$result$features
+## create new feature
+task_st_filter <- encoded_tsk$clone(deep = TRUE)
+task_st_filter$select(
+  instance$result$features[[1]]
+)
+
+# HPO #
+tuning_instance <- ti(
+  task = task_st_filter,
+  learner = lrn("regr.xgboost"),
+  resampling = rsmp("spcv_coords", folds = 30),
+  measure = msr("regr.rmse"),
+  search_space = lts("regr.xgboost.default"),  # Corrected argument name
+  terminator = trm("evals", n_evals = 100)  # Define termination criterion
+)
+
+tuner = tnr("mbo")
+
+progressr::with_progress(tuner$optimize(tuning_instance))
+
+# tuned learner #
+tuned_learner = lrn("regr.xgboost")
+tuned_learner$param_set$set_values(.values= tuning_instance$result_learner_param_vals)
+
+task_st_filter_S9 <- task_st_filter$clone(deep = TRUE)
+# resampling instance and plot  #
+resampling_instance = mlr3::resample(
+  task= task_st_filter_S9,
+  learner = tuned_learner,
+  resampling = rsmp("spcv_coords", folds = 30))
+
+
+P_S9<-dot_plot2(resampling_instance, dot_alpha = 0.9)
