@@ -46,54 +46,7 @@ library(dplyr)
 library(ggplot2)
 library(sf)
 library(patchwork)  # For arranging plots
-dot_plot2 <- function(x, labs = NULL, dot_alpha = 0.01, ...) {
-  rr <- x$aggregate(measure = c(
-    mlr3::msr("regr.bias"),
-    mlr3::msr("regr.rmse"),
-    mlr3::msr("regr.mse")
-  )) |>
-    round(2)
-  
-  df <- x$prediction() |>
-    data.table::as.data.table()
-  
-  
-  # get max of x and y
-  max_xy <- round(max(
-    max(df$response, na.rm = TRUE),
-    max(df$truth, na.rm = TRUE)
-  ) / 10) * 10
-  
-  # plot the results.
-  p <- df |>
-    ggplot() +
-    aes(y = truth, x = response) +
-    geom_point(col = "#f08a46", alpha = dot_alpha) +
-    #geom_density_2d(aes(col = after_stat(level))) +
-    scale_color_viridis_c(direction = -1, option = "mako") +
-    guides(alpha = "none", color = "none") +
-    geom_abline(slope = 1) +
-    #coord_fixed(xlim = c(0, max_xy), ylim = c(0, max_xy)) +
-    annotate("text",
-             x = max_xy * 0.1, y = max_xy * 0.9,
-             label = paste0("bias = ", rr["regr.bias"])
-    ) +
-    annotate("text",
-             x = max_xy * 0.1, y = max_xy * 0.85,
-             label = paste0("rmse = ", rr["regr.rmse"])
-    ) +
-    annotate("text",
-             x = max_xy * 0.1, y = max_xy * 0.8,
-             label = paste0("mse = ", rr["regr.mse"])
-    ) +
-    theme_linedraw()
-  
-  if (!is.null(labs)) {
-    p <- p + labs
-  }
-  
-  return(p)
-}
+
 
 
 
@@ -170,8 +123,19 @@ run_ml_pipeline <- function(train_data, feature_suffixes, folds_spcv = 6, folds_
   train_data_filtered <- train_data %>% select("wmean_percC_5", ends_with(feature_suffixes))
   
   
+  
+  
   # Convert to Regression Task (for Spatial Data)
   task <- as_task_regr_st(train_data_filtered, target = "wmean_percC_5", id = paste0("sim_", sim_id))
+  
+  # select best learner
+  learners = lrns(c( "regr.ranger", "regr.rpart", "regr.xgboost"), predict_type = "response")
+  rsmp_cv5 = rsmp("cv", folds = 5)
+  design = benchmark_grid(task, learners, rsmp_cv5)
+  bmr = benchmark(design)
+  
+  best_row <- bmr$aggregate()[which.min(bmr$aggregate()$regr.mse), ]
+  learn <- best_row$learner_id
   
   poe = po("encode")
   encoded_tsk = poe$train(list(task))[[1]]
@@ -179,7 +143,7 @@ run_ml_pipeline <- function(train_data, feature_suffixes, folds_spcv = 6, folds_
   ## feature selection ##
   instance = fsi(
     task = encoded_tsk,
-    learner = lrn("regr.xgboost"),
+    learner = lrn(learn),
     resampling = rsmp("spcv_coords", folds = folds_spcv),
     measures = msr("regr.rmse"), ## multiple measures works for multicrit but try tpo evaluate different things 
     terminator = trm("evals", n_evals = 100)
@@ -201,10 +165,10 @@ run_ml_pipeline <- function(train_data, feature_suffixes, folds_spcv = 6, folds_
   ## HPO ##
   tuning_instance <- ti(
     task = task_st_filter,
-    learner = lrn("regr.xgboost"),
+    learner = lrn(learn),
     resampling = rsmp("spcv_coords", folds = folds_hpo),
     measure = msr("regr.rmse"),
-    search_space = lts("regr.xgboost.default"),  # Corrected argument name
+    search_space = lts(paste0(learn,".default")),  # Corrected argument name
     terminator = trm("evals", n_evals = 100)  # Define termination criterion
   )
   
@@ -213,7 +177,7 @@ run_ml_pipeline <- function(train_data, feature_suffixes, folds_spcv = 6, folds_
   progressr::with_progress(tuner$optimize(tuning_instance))
   
   ## tuned learner ##
-  tuned_learner = lrn("regr.xgboost")
+  tuned_learner = lrn(learn)
   tuned_learner$param_set$set_values(.values= tuning_instance$result_learner_param_vals)
   
   task_st_filter_S1 <- task_st_filter$clone(deep = TRUE)
@@ -261,15 +225,15 @@ run_ml_pipeline <- function(train_data, feature_suffixes, folds_spcv = 6, folds_
       y = "Modelled Carbon"
     ) +
     annotate("text",
-             x = xy_lim * 0.1, y = xy_lim * 0.95,
+             x = xy_lim * 0.15, y = xy_lim * 0.95,
              label = paste0("bias = ", rr["regr.bias"])
     ) +
     annotate("text",
-             x = xy_lim * 0.1, y = xy_lim * 0.9,
+             x = xy_lim * 0.15, y = xy_lim * 0.9,
              label = paste0("rmse = ", rr["regr.rmse"])
     ) +
     annotate("text",
-             x = xy_lim * 0.1, y = xy_lim * 0.85,
+             x = xy_lim * 0.15, y = xy_lim * 0.85,
              label = paste0("mse = ", rr["regr.mse"])
     ) +
     theme_linedraw()
@@ -293,7 +257,8 @@ simulations <- list(
   list(feature_suffixes = c("_1", "_2", "_4", "_5"), sim_id = 7),
   list(feature_suffixes = c("_3", "_4", "_5"), sim_id = 8),
   list(feature_suffixes = c("_1", "_2", "_4", "_5", "_3"), sim_id = 9),
-  list(feature_suffixes = c("_1", "_2", "_3"), sim_id = 10)
+  list(feature_suffixes = c("_1", "_2", "_4", "_3"), sim_id = 10),
+  list(feature_suffixes = c("_1", "_2", "_3"), sim_id = 11)
 )
 
 # Run Simulations
@@ -303,7 +268,7 @@ results <- lapply(simulations, function(sim) {
 
 # Collect Benchmark Metrics
 metrics_df <- do.call(rbind, lapply(results, function(res) res$metrics))
-variables_df <- do.call(rbind, lapply(results, function(res) res$retained_variables))
+variables_df <- do.call(rbind, lapply(results, function(res) res$retained_variables[1]))
 
 # Plot Benchmarking Results
 benchmark_plot <- ggplot(metrics_df, aes(x = as.factor(sim_id))) +
