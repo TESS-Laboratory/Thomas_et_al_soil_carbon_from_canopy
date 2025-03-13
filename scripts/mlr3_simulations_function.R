@@ -46,8 +46,59 @@ library(dplyr)
 library(ggplot2)
 library(sf)
 library(patchwork)  # For arranging plots
+dot_plot2 <- function(x, labs = NULL, dot_alpha = 0.01, ...) {
+  rr <- x$aggregate(measure = c(
+    mlr3::msr("regr.bias"),
+    mlr3::msr("regr.rmse"),
+    mlr3::msr("regr.mse")
+  )) |>
+    round(2)
+  
+  df <- x$prediction() |>
+    data.table::as.data.table()
+  
+  
+  # get max of x and y
+  max_xy <- round(max(
+    max(df$response, na.rm = TRUE),
+    max(df$truth, na.rm = TRUE)
+  ) / 10) * 10
+  
+  # plot the results.
+  p <- df |>
+    ggplot() +
+    aes(y = truth, x = response) +
+    geom_point(col = "#f08a46", alpha = dot_alpha) +
+    #geom_density_2d(aes(col = after_stat(level))) +
+    scale_color_viridis_c(direction = -1, option = "mako") +
+    guides(alpha = "none", color = "none") +
+    geom_abline(slope = 1) +
+    #coord_fixed(xlim = c(0, max_xy), ylim = c(0, max_xy)) +
+    annotate("text",
+             x = max_xy * 0.1, y = max_xy * 0.9,
+             label = paste0("bias = ", rr["regr.bias"])
+    ) +
+    annotate("text",
+             x = max_xy * 0.1, y = max_xy * 0.85,
+             label = paste0("rmse = ", rr["regr.rmse"])
+    ) +
+    annotate("text",
+             x = max_xy * 0.1, y = max_xy * 0.8,
+             label = paste0("mse = ", rr["regr.mse"])
+    ) +
+    theme_linedraw()
+  
+  if (!is.null(labs)) {
+    p <- p + labs
+  }
+  
+  return(p)
+}
 
-set.seed(123)  # For reproducibility
+
+
+
+set.seed(42)  # For reproducibility
 
 samples_metrics<- read_sf("Data/soil_samples_w_complete_metrics.fgb")
 
@@ -108,33 +159,16 @@ converted_data <- convert_to_numeric_or_factor(non_sf)
 #converted_data<- non_sf
 colnames(converted_data)<-make.names(colnames(converted_data))
 
+### start modelling ####
 
-#### Function to Split Dataset (Preserving sf Structure) ####
-split_dataset <- function(data, split_ratio = 0.7) {
-  if (!inherits(data, "sf")) {
-    stop("Error: Input data must be an sf object!")
-  }
-  
-  total_rows <- nrow(data)
-  if (total_rows < 2) {
-    stop("Error: Not enough data for splitting!")
-  }
-  
-  train_indices <- sample(seq_len(total_rows), size = floor(split_ratio * total_rows))
-  train_data <- data[train_indices, ]
-  test_data <- data[-train_indices, ]
-  
-  return(list(train = train_data, test = test_data))
-}
 
-### Function to Run the Spatial Machine Learning Pipeline ####
-run_ml_pipeline <- function(train_data, test_data, feature_suffixes, folds_spcv = 5, folds_hpo = 5, sim_id) {
+# Function to Run the Spatial Machine Learning Pipeline
+run_ml_pipeline <- function(train_data, feature_suffixes, folds_spcv = 6, folds_hpo = 6, sim_id, xy_lim= 8) {
   message(paste0("Running Simulation ", sim_id, " with features: ", paste(feature_suffixes, collapse = ", ")))
   
   # Extract Selected Features
-  #selected_features <- select("wmean_percC_5", ends_with(feature_suffixes))  
   train_data_filtered <- train_data %>% select("wmean_percC_5", ends_with(feature_suffixes))
-  test_data_filtered <- test_data %>% select("wmean_percC_5", ends_with(feature_suffixes))
+  
   
   # Convert to Regression Task (for Spatial Data)
   task <- as_task_regr_st(train_data_filtered, target = "wmean_percC_5", id = paste0("sim_", sim_id))
@@ -146,9 +180,9 @@ run_ml_pipeline <- function(train_data, test_data, feature_suffixes, folds_spcv 
   instance = fsi(
     task = encoded_tsk,
     learner = lrn("regr.xgboost"),
-    resampling = rsmp("spcv_coords", folds = 10),
+    resampling = rsmp("spcv_coords", folds = folds_spcv),
     measures = msr("regr.rmse"), ## multiple measures works for multicrit but try tpo evaluate different things 
-    terminator = trm("evals", n_evals = 10)
+    terminator = trm("evals", n_evals = 100)
   )
   
   # Choose optimization algorithm
@@ -168,10 +202,10 @@ run_ml_pipeline <- function(train_data, test_data, feature_suffixes, folds_spcv 
   tuning_instance <- ti(
     task = task_st_filter,
     learner = lrn("regr.xgboost"),
-    resampling = rsmp("spcv_coords", folds = 10),
+    resampling = rsmp("spcv_coords", folds = folds_hpo),
     measure = msr("regr.rmse"),
     search_space = lts("regr.xgboost.default"),  # Corrected argument name
-    terminator = trm("evals", n_evals = 10)  # Define termination criterion
+    terminator = trm("evals", n_evals = 100)  # Define termination criterion
   )
   
   tuner = tnr("mbo")
@@ -190,39 +224,63 @@ run_ml_pipeline <- function(train_data, test_data, feature_suffixes, folds_spcv 
     resampling = rsmp("spcv_coords", folds = 10))
   
   learner_final <- tuned_learner$train(task_st_filter_S1)
-  predictions <- learner_final$predict_newdata(test_data_filtered)
+  
   
   # 5. Compute Metrics
-  rmse <- sqrt(mean((predictions$response - test_data_filtered$wmean_percC_5)^2))
-  mae <- mean(abs(predictions$response - test_data_filtered$wmean_percC_5))
-  bias <- mean(predictions$response - test_data_filtered$wmean_percC_5)
+  rr <- resampling_instance$aggregate(measure = c(
+    mlr3::msr("regr.bias"),
+    mlr3::msr("regr.rmse"),
+    mlr3::msr("regr.mse")
+  )) |>
+    round(2)
   
-  metrics <- data.frame(sim_id = sim_id, RMSE = rmse, MAE = mae, Bias = bias)
+  df <- resampling_instance$prediction() |>
+    data.table::as.data.table()
+  
   
   # 6. Modelled vs Observed Plot
-  plot <- ggplot(test_data_filtered, aes(x = wmean_percC_5, y = predictions$response)) +
-    geom_point(color = "blue", alpha = 0.6) +
-    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  # get max of x and y
+  max_xy <- round(max(
+    max(df$response, na.rm = TRUE),
+    max(df$truth, na.rm = TRUE)
+  ) / 10) * 10
+  
+  # plot the results.
+  Plot <- df |>
+    ggplot() +
+    aes(y = response, x = truth) +
+    geom_point(col = "#f08a46", alpha = 0.9) +
+    #geom_density_2d(aes(col = after_stat(level))) +
+    scale_color_viridis_c(direction = -1, option = "mako") +
+    guides(alpha = "none", color = "none") +
+    geom_abline(slope = 1) +
+    coord_fixed(xlim = c(0, xy_lim), ylim = c(0, xy_lim)) +
     labs(
       title = paste0("Simulation", sim_id),
       x = "Observed Carbon",
       y = "Modelled Carbon"
     ) +
-    annotate("text", x = min(test_data_filtered$wmean_percC_5), y = max(predictions$response)*0.97 , 
-             label = paste0("RMSE:", round(rmse, 2),"\n",
-                            "MAE:", round(mae, 2),"\n",
-                            "Bias:", round(bias, 2)),
-             hjust = 0.1, size = 2, color = "black") +
-    theme_minimal()
+    annotate("text",
+             x = xy_lim * 0.1, y = xy_lim * 0.95,
+             label = paste0("bias = ", rr["regr.bias"])
+    ) +
+    annotate("text",
+             x = xy_lim * 0.1, y = xy_lim * 0.9,
+             label = paste0("rmse = ", rr["regr.rmse"])
+    ) +
+    annotate("text",
+             x = xy_lim * 0.1, y = xy_lim * 0.85,
+             label = paste0("mse = ", rr["regr.mse"])
+    ) +
+    theme_linedraw()
   
-  return(list(rr = resampling_instance, metrics = metrics, plot = plot, retained_variables = S1_Vars))
+  
+  
+  return(list(rr = resampling_instance, metrics = rr, plot = Plot, retained_variables = S1_Vars, learner = learner_final)) ## add learner to this list 
 }
 
 
-# Split Data into Train and Test
-split_data <- split_dataset(converted_data)
-train_data <- split_data$train
-test_data <- split_data$test
+
 
 # Define Simulation Configurations
 simulations <- list(
@@ -240,11 +298,12 @@ simulations <- list(
 
 # Run Simulations
 results <- lapply(simulations, function(sim) {
-  run_ml_pipeline(train_data, test_data, sim$feature_suffixes, sim_id = sim$sim_id)
+  run_ml_pipeline(converted_data, sim$feature_suffixes, sim_id = sim$sim_id)
 })
 
 # Collect Benchmark Metrics
 metrics_df <- do.call(rbind, lapply(results, function(res) res$metrics))
+variables_df <- do.call(rbind, lapply(results, function(res) res$retained_variables))
 
 # Plot Benchmarking Results
 benchmark_plot <- ggplot(metrics_df, aes(x = as.factor(sim_id))) +
