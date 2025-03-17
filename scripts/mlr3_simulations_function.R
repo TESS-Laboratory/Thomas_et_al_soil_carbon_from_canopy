@@ -127,18 +127,19 @@ run_ml_pipeline <- function(train_data, feature_suffixes, folds_spcv = 6, folds_
   
   # Convert to Regression Task (for Spatial Data)
   task <- as_task_regr_st(train_data_filtered, target = "wmean_percC_5", id = paste0("sim_", sim_id))
+  poe = po("encode")
+  encoded_tsk = poe$train(list(task))[[1]]
   
   # select best learner
   learners = lrns(c( "regr.ranger", "regr.rpart", "regr.xgboost"), predict_type = "response")
   rsmp_cv5 = rsmp("cv", folds = 5)
-  design = benchmark_grid(task, learners, rsmp_cv5)
+  design = benchmark_grid(encoded_tsk, learners, rsmp_cv5)
   bmr = benchmark(design)
   
   best_row <- bmr$aggregate()[which.min(bmr$aggregate()$regr.mse), ]
   learn <- best_row$learner_id
   
-  poe = po("encode")
-  encoded_tsk = poe$train(list(task))[[1]]
+  
   
   ## feature selection ##
   instance = fsi(
