@@ -27,6 +27,7 @@ install.packages("remotes")
 remotes::install_github("mlr-org/mlr3extralearners@*release")
 install.packages("glmnet")
 install.packages("kknn")
+
 library(glmnet)
 library(kknn)
 library(mlr3extralearners)
@@ -51,13 +52,51 @@ library(mlr3tuning)
 library(mlr3mbo)
 library(data.table)
 library(dplyr)
+library(tidyr)
 library(ggplot2)
 library(sf)
 library(patchwork)  # For arranging plots
+library(future)
 
+future::plan("sequential", workers = 40)
 
-
-
+#' Create hyperparameter tuning space for xgboost
+#' @param prefix character prefix to add to parameter names - useful for
+#' ensemble models or where the xgboost leanrer id has been changed.
+#' @param add_paramsets an additional ParamSet object to add to the
+#' collection
+#' @return a paradox ParamSet object
+#' @export
+xgboost_ps <- function(prefix = NULL, add_paramset = NULL) {
+  prefix <- if (!is.null(prefix)) paste0(prefix, ".") else ""
+  if (!is.null(add_paramset)) paradox::assert_param_set(add_paramset)
+  paramset <- setNames(
+    list(
+      paradox::p_dbl(0.01, 0.5, logscale = TRUE), # eta
+      paradox::p_int(1, 1000), # nrounds
+      paradox::p_int(3, 12), # max_depth
+      paradox::p_dbl(0.1, 1), # subsample
+      paradox::p_dbl(0.1, 1), # colsample_bytree
+      paradox::p_dbl(0.1, 1), # colsample_bylevel
+      paradox::p_dbl(0.001, 700, logscale = TRUE), # alpha
+      paradox::p_dbl(0.001, 700, logscale = TRUE) # lambda
+    ),
+    paste0(
+      prefix,
+      c(
+        "eta",
+        "nrounds",
+        "max_depth",
+        "subsample",
+        "colsample_bytree",
+        "colsample_bylevel",
+        "alpha",
+        "lambda"
+      )
+    )
+  )
+  
+}
 
 set.seed(42)  # For reproducibility
 
@@ -65,32 +104,33 @@ set.seed(42)  # For reproducibility
 
 #dataset
 samples_metrics<- read_sf("Data/soil_samples_w_complete_metrics.fgb")
+train_data_rm<- select(train_data, where(~!any(is.na(.))))
+train_data_clean<- select(converted_data, -"wmean_acd_lidar_3", -"wmean_GF_3")%>%
+  drop_na()
 
 # Define Simulation Configurations
 simulations <- list(
-  list(feature_suffixes = c("_1"), sim_id = 1),
-  list(feature_suffixes = c("_1", "_2"), sim_id = 2),
-  list(feature_suffixes = c("_3"), sim_id = 3),
-  list(feature_suffixes = c("_5"), sim_id = 4),
-  list(feature_suffixes = c("_4", "_5"), sim_id = 5),
-  list(feature_suffixes = c("_1", "_5"), sim_id = 6),
-  list(feature_suffixes = c("_1", "_2", "_4", "_5"), sim_id = 7),
-  list(feature_suffixes = c("_3", "_4", "_5"), sim_id = 8),
-  list(feature_suffixes = c("_1", "_2", "_4", "_5", "_3"), sim_id = 9),
-  list(feature_suffixes = c("_1", "_2", "_4", "_3"), sim_id = 10),
-  list(feature_suffixes = c("_1", "_2", "_3"), sim_id = 11)
+  #list(feature_suffixes = c("_1"), sim_id = 1),
+  #list(feature_suffixes = c("_1", "_2"), sim_id = 2),
+  list(feature_suffixes = c("_3"), sim_id = 3)
+  #list(feature_suffixes = c("_5"), sim_id = 4),
+  #list(feature_suffixes = c("_4", "_5"), sim_id = 5),
+  #list(feature_suffixes = c("_1", "_5"), sim_id = 6),
+  #list(feature_suffixes = c("_1", "_2", "_4", "_5"), sim_id = 7),
+  #list(feature_suffixes = c("_3", "_4", "_5"), sim_id = 8),
+  #list(feature_suffixes = c("_1", "_2", "_4", "_5", "_3"), sim_id = 9),
+  #list(feature_suffixes = c("_1", "_2", "_4", "_3"), sim_id = 10),
+  #list(feature_suffixes = c("_1", "_2", "_3"), sim_id = 11)
 )
 
 # Define learners and search space Configurations
 students <- list(
-  list(learner = "regr.ranger", SS = "regr.ranger.default"),
-  #list(learner = "regr.glm", SS = "regr.glmnet.default"),
-  #list(learner = "regr.kknn", SS = "regr.kknn.default"),
-  #list(learner = "regr.km", SS = "regr.ranger.default"),
-  #list(learner = "regr.nnet", SS = "regr.ranger.default"),
-  list(learner = "regr.rpart", SS = "regr.rpart.default"),
-  #list(learner = "regr.svm", SS = "regr.svm.default"),
-  list(learner = "regr.xgboost", SS = "regr.xgboost.rbv1")
+  list(learner = lrn("regr.ranger"), SS = "regr.ranger.default"),
+  #list(learner = lrn("regr.glm", id = "glm1"), SS=NULL),
+  #list(learner = lrn("regr.kknn"), SS = "regr.kknn.default"),
+  list(learner = lrn("regr.rpart"), SS = "regr.rpart.default")
+  #list(learner = lrn("regr.svm"), SS = "regr.svm.default")
+  #list(learner = lrn("regr.xgboost"), SS = xgboost_ps)
 )
 
 
@@ -101,6 +141,7 @@ set_up_tasks <- function(train_data, feature_suffixes, sim_id) {
   # Extract Selected Features
   train_data_filtered <- train_data %>% select("wmean_percC_5", ends_with(feature_suffixes))
   
+  
   # Convert to Regression Task (for Spatial Data)
   task <- as_task_regr_st(train_data_filtered, target = "wmean_percC_5", id = paste0("sim_", sim_id))
   poe = po("encode")
@@ -110,21 +151,24 @@ set_up_tasks <- function(train_data, feature_suffixes, sim_id) {
 }
 
 task_list <- lapply(simulations, function(sim) {
-  set_up_tasks(converted_data, sim$feature_suffixes, sim_id = sim$sim_id)
+  set_up_tasks(train_data_clean, sim$feature_suffixes, sim_id = sim$sim_id)
 })
 
 ### create at function for multiple at learners ####
 set_up_at_learners <- function(lrnr, SS) {
-  
-  at = auto_tuner(
-    tuner = tnr("mbo"),
-    learner = lrn(lrnr),
-    resampling = rsmp("spcv_coords", folds = 3),
-    measure = msr("regr.rmse"),
-    search_space = lts(SS),
-    term_evals = 10,
-    terminator = trm("evals", n_evals = 100)
-  )
+  if(is.null(SS)){
+    at=lrnr
+  } else{
+    at = auto_tuner(
+      tuner = tnr("mbo"),
+      learner = lrnr,
+      resampling = rsmp("spcv_coords", folds = 3),
+      measure = msr("regr.rmse"),
+      search_space = lts(SS),
+      term_evals = 10,
+      terminator = trm("evals", n_evals = 10)
+    )
+  }
   
   afs = auto_fselector(
     fselector = fs("genetic_search"),
@@ -132,14 +176,14 @@ set_up_at_learners <- function(lrnr, SS) {
     resampling = rsmp("spcv_coords", folds = 3),
     measure = msr("regr.rmse"),
     term_evals = 10,
-    terminator = trm("evals", n_evals = 100)
+    terminator = trm("evals", n_evals = 10)
   )
   
-  return( afs)  
+  return(afs)  
 }
 
-learns_list <- lapply(students, function(student) {
-  set_up_at_learners(lrnr = student$learner, SS = student$SS)
+learns_list <- lapply(students, function(students) {
+  set_up_at_learners(lrnr = students$learner, SS = students$SS)
 })
 ### bench mark design ####
 
@@ -148,19 +192,19 @@ learners = learns_list
 resamplings = rsmp("spcv_coords", folds = 3)
 
 design = benchmark_grid(task_list, learners, resamplings)
-bmr = benchmark(design)
-bmr$aggregate
+bmr = progressr::with_progress(benchmark(design, store_models = TRUE))#, encapsulate = "evaluate"))
+bmr$aggregate()
 
 ### extract results ####
 best_row <- bmr$aggregate()[which.min(bmr$aggregate()$regr.mse), ]
 learn <- best_row$learner_id
 
-result <- bmr$aggregate %>%
+x <- bmr$aggregate() %>%
   group_by(task_id) %>%
-  filter(reg.mse == min(reg.mse, na.rm = TRUE)) %>%
+  filter(regr.mse == min(regr.mse, na.rm = TRUE)) %>%
   ungroup()
 
 ### resample best learners ####
-
+bmr$score()$learner[[3]]$importance()
 
 ### plots and analysis ####
