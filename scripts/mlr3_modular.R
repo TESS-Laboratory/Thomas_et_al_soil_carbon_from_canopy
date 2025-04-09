@@ -58,7 +58,7 @@ library(sf)
 library(patchwork)  # For arranging plots
 library(future)
 
-future::plan("sequential", workers = 40)
+future::plan("multisession", workers = 40)
 
 #' Create hyperparameter tuning space for xgboost
 #' @param prefix character prefix to add to parameter names - useful for
@@ -104,29 +104,29 @@ set.seed(42)  # For reproducibility
 
 #dataset
 samples_metrics<- read_sf("Data/soil_samples_w_complete_metrics.fgb")
-train_data_rm<- select(train_data, where(~!any(is.na(.))))
+#train_data_rm<- select(train_data, where(~!any(is.na(.))))
 train_data_clean<- select(converted_data, -"wmean_acd_lidar_3", -"wmean_GF_3")%>%
   drop_na()
 
 # Define Simulation Configurations
 simulations <- list(
-  #list(feature_suffixes = c("_1"), sim_id = 1),
-  #list(feature_suffixes = c("_1", "_2"), sim_id = 2),
-  list(feature_suffixes = c("_3"), sim_id = 3)
-  #list(feature_suffixes = c("_5"), sim_id = 4),
-  #list(feature_suffixes = c("_4", "_5"), sim_id = 5),
-  #list(feature_suffixes = c("_1", "_5"), sim_id = 6),
-  #list(feature_suffixes = c("_1", "_2", "_4", "_5"), sim_id = 7),
-  #list(feature_suffixes = c("_3", "_4", "_5"), sim_id = 8),
-  #list(feature_suffixes = c("_1", "_2", "_4", "_5", "_3"), sim_id = 9),
-  #list(feature_suffixes = c("_1", "_2", "_4", "_3"), sim_id = 10),
-  #list(feature_suffixes = c("_1", "_2", "_3"), sim_id = 11)
+  list(feature_suffixes = c("_1"), sim_id = 1),
+  list(feature_suffixes = c("_1", "_2"), sim_id = 2),
+  list(feature_suffixes = c("_3"), sim_id = 3),
+  list(feature_suffixes = c("_5"), sim_id = 4),
+  list(feature_suffixes = c("_4", "_5"), sim_id = 5),
+  list(feature_suffixes = c("_1", "_5"), sim_id = 6),
+  list(feature_suffixes = c("_1", "_2", "_4", "_5"), sim_id = 7),
+  list(feature_suffixes = c("_3", "_4", "_5"), sim_id = 8),
+  list(feature_suffixes = c("_1", "_2", "_4", "_5", "_3"), sim_id = 9),
+  list(feature_suffixes = c("_1", "_2", "_4", "_3"), sim_id = 10),
+  list(feature_suffixes = c("_1", "_2", "_3"), sim_id = 11)
 )
 
 # Define learners and search space Configurations
 students <- list(
-  list(learner = lrn("regr.ranger"), SS = "regr.ranger.default"),
-  #list(learner = lrn("regr.glm", id = "glm1"), SS=NULL),
+  list(learner = lrn("regr.ranger", importance = "impurity"), SS = "regr.ranger.default"),
+  list(learner = lrn("regr.glm"), SS=NULL),
   #list(learner = lrn("regr.kknn"), SS = "regr.kknn.default"),
   list(learner = lrn("regr.rpart"), SS = "regr.rpart.default")
   #list(learner = lrn("regr.svm"), SS = "regr.svm.default")
