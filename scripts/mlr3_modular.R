@@ -126,7 +126,7 @@ simulations <- list(
 # Define learners and search space Configurations
 students <- list(
   list(learner = lrn("regr.ranger", importance = "impurity"), SS = "regr.ranger.default"),
-  list(learner = lrn("regr.glm"), SS=NULL)
+  list(learner = lrn("regr.glm"), SS=NULL),
   #list(learner = lrn("regr.kknn"), SS = "regr.kknn.default"),
   #list(learner = lrn("regr.rpart"), SS = "regr.rpart.default")
   #list(learner = lrn("regr.svm"), SS = "regr.svm.default")
