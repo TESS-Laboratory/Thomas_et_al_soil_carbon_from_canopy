@@ -28,6 +28,7 @@ remotes::install_github("mlr-org/mlr3extralearners@*release")
 install.packages("glmnet")
 install.packages("kknn")
 
+
 library(glmnet)
 library(kknn)
 library(mlr3extralearners)
@@ -58,7 +59,7 @@ library(sf)
 library(patchwork)  # For arranging plots
 library(future)
 
-future::plan("multisession", workers = 40)
+future::plan("multisession", workers = 4)
 
 #' Create hyperparameter tuning space for xgboost
 #' @param prefix character prefix to add to parameter names - useful for
@@ -105,8 +106,25 @@ set.seed(42)  # For reproducibility
 #dataset
 samples_metrics<- read_sf("Data/soil_samples_w_complete_metrics.fgb")
 #train_data_rm<- select(train_data, where(~!any(is.na(.))))
-train_data_clean<- select(converted_data, -"wmean_acd_lidar_3", -"wmean_GF_3")%>%
+train_data_clean<- select(samples_metrics, -"wmean_acd_lidar_3", -"wmean_GF_3")%>%
   drop_na()
+
+convert_to_numeric_or_factor <- function(df) {
+  df %>%
+    mutate(across(where(~ !inherits(., "sfc")), ~ {  # Ignore geometry columns
+      num_col <- suppressWarnings(as.numeric(.))
+      if (all(is.na(.) | !is.na(num_col))) {
+        num_col
+      } else {
+        as.factor(.)
+      }
+    }))
+}
+
+converted_data <- convert_to_numeric_or_factor(train_data_clean)
+##make sure headers work in mlr3 ecosystem
+#converted_data<- non_sf
+colnames(converted_data)<-make.names(colnames(converted_data))
 
 # Define Simulation Configurations
 simulations <- list(
@@ -128,7 +146,7 @@ students <- list(
   list(learner = lrn("regr.ranger", importance = "impurity"), SS = "regr.ranger.default"),
   list(learner = lrn("regr.glm"), SS=NULL),
   #list(learner = lrn("regr.kknn"), SS = "regr.kknn.default"),
-  #list(learner = lrn("regr.rpart"), SS = "regr.rpart.default")
+  list(learner = lrn("regr.rpart"), SS = "regr.rpart.default")
   #list(learner = lrn("regr.svm"), SS = "regr.svm.default")
   #list(learner = lrn("regr.xgboost"), SS = xgboost_ps)
 )
@@ -151,7 +169,7 @@ set_up_tasks <- function(train_data, feature_suffixes, sim_id) {
 }
 
 task_list <- lapply(simulations, function(sim) {
-  set_up_tasks(train_data_clean, sim$feature_suffixes, sim_id = sim$sim_id)
+  set_up_tasks(converted_data, sim$feature_suffixes, sim_id = sim$sim_id)
 })
 
 ### create at function for multiple at learners ####
@@ -246,3 +264,4 @@ df <- df[order(-df$adjusted_count), ]
 # Print the sorted table
 print(df)
 ### plots and analysis ####
+write.csv(df, "Data/variable_presence_count.csv", row.names = FALSE)
