@@ -1,26 +1,46 @@
 ## A script to use GLMs to model and analyse the mechanistic effects of canopy structure on Soil C
 
-## pick method of narrowing values
-# frequency density 
+#### set up environment ####
+library(performance)
+
+#TODO pick method of narrowing values
+
+# option 1 frequency density 
 df<- read.csv("Data/variable_presence_count.csv")
 fixed_vars <- df$value[4:25]
 
+#create a formula for chosen variables
 formula_str <- paste("wmean_percC_5 ~", paste(fixed_vars, collapse = " + "))
 glm_formula <- as.formula(formula_str)
 
+##compare performance of different family and links
+glm.gaus.log <- glm(glm_formula, data = converted_data, family= gaussian('log'))
+glm.gaus.id <- glm(glm_formula, data = converted_data, family = gaussian('identity'))
+glm.gam.log <- glm(glm_formula, data = converted_data, family = Gamma(link="log"))
+glm.gam.id<- glm(glm_formula, data = converted_data, family = Gamma(link="identity"))
 
-glm_model <- glm(glm_formula, data = converted_data, family = gaussian())
+## review
+compare_performance(glm.gam.log, glm.gaus.id, glm.gaus.log, glm.gam.id, verbose = FALSE, rank = TRUE)
+summary(glm.gam.log)
+
+check_model(glm.gam.log)
+
+plot(resid(glm.gam.log, type='response'))
+lines(resid(glm.gam.log, type='response'), col='red')
+
+##selected formula
+glm_model <- glm(glm_formula, data = converted_data, family = Gamma(link="log"))
 
 summary(glm_model)
 
 
-# Perform backward selection
-# direction = "backward" ensures the model starts with all predictors
+# Perform automated backward selection
 best_model <- step(glm_model, direction = "backward")
 
 #View the summary of the best model
 summary(best_model)
 
+## plot effect sizes 
 coef_summary <- summary(best_model)$coefficients
 conf_int <- confint(best_model)
 
@@ -32,7 +52,7 @@ effects_df <- data.frame(
   CI_high = conf_int[, 2]
 )
 
-# Optional: remove the intercept if you want to focus only on predictors
+# remove the intercept to focus only on predictors
 effects_df <- effects_df[effects_df$Predictor != "(Intercept)", ]
 
 # Plot
@@ -42,7 +62,8 @@ ggplot(effects_df, aes(x = reorder(Predictor, Estimate), y = Estimate)) +
   coord_flip() +
   theme_minimal() +
   labs(
-    title = "Effect Sizes from Best GLM",
+    title = "Effect Sizes (Log Scale) from Gamma GLM",
     x = "Predictor",
-    y = "Coefficient Estimate (with 95% CI)"
+    y = "Log Coefficient Estimate ± 95% CI"
   )
+
