@@ -4,9 +4,29 @@
 library(performance)
 
 #TODO pick method of narrowing values
+df_numeric <- converted_data %>%
+  select(where(is.numeric))
+
+## plot without categorical data 
+rda.out <- vegan::rda(df_numeric, scale = TRUE)
+# add scores()
+rda_scores <- scores(rda.out)
+# add biplot()
+biplot(rda.out, type = "text")
+## group by depth ### this doesnt work yet
+ordihull(rda.out,
+         group = Fmetrics_num$Profundidade_cm_,
+         col = 1:11,
+         lty = 1:11,
+         lwd = c(3,6), 
+         label = TRUE)
+
+
 
 # option 1 frequency density 
 df<- read.csv("Data/variable_presence_count.csv")
+
+
 fixed_vars <- df$value[4:25]
 
 #create a formula for chosen variables

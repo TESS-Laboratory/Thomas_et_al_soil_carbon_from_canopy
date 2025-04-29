@@ -138,7 +138,8 @@ simulations <- list(
   list(feature_suffixes = c("_3", "_4", "_5"), sim_id = 8),
   list(feature_suffixes = c("_1", "_2", "_4", "_5", "_3"), sim_id = 9),
   list(feature_suffixes = c("_1", "_2", "_4", "_3"), sim_id = 10),
-  list(feature_suffixes = c("_1", "_2", "_3"), sim_id = 11)
+  list(feature_suffixes = c("_1", "_2", "_3"), sim_id = 11),
+  list(feature_suffixes = c("_1", "_3"), sim_id = 12)
 )
 
 # Define learners and search space Configurations
@@ -183,8 +184,8 @@ set_up_at_learners <- function(lrnr, SS) {
       resampling = rsmp("spcv_coords", folds = 3),
       measure = msr("regr.rmse"),
       search_space = lts(SS),
-      term_evals = 10,
-      terminator = trm("evals", n_evals = 10)
+      term_evals = 100,
+      terminator = trm("evals", n_evals = 100)
     )
   }
   
@@ -193,8 +194,8 @@ set_up_at_learners <- function(lrnr, SS) {
     learner = at,
     resampling = rsmp("spcv_coords", folds = 3),
     measure = msr("regr.rmse"),
-    term_evals = 10,
-    terminator = trm("evals", n_evals = 10)
+    term_evals = 100,
+    terminator = trm("evals", n_evals = 100)
   )
   
   return(afs)  
@@ -217,11 +218,38 @@ bmr$aggregate()
 best_row <- bmr$aggregate()[which.min(bmr$aggregate()$regr.mse), ]
 learn <- best_row$learner_id
 
-x <- bmr$aggregate() %>%
+x <- bmr$aggregate(measures = c(msr("regr.rmse"), msr("regr.mse"))) %>%
   group_by(task_id) %>%
-  filter(regr.mse == min(regr.mse, na.rm = TRUE)) %>%
+  filter(regr.rmse == min(regr.rmse, na.rm = TRUE)) %>%
   ungroup()
 
+m_obs<- mean(converted_data$wmean_percC_5)
+x$rRMSE<- x$regr.rmse/m_obs
+
+x <- x %>%
+  arrange(regr.rmse) %>%
+  mutate(task_id = factor(task_id, levels = rev(task_id)))  # reversed for top-down
+
+# Transform to long format (without negating)
+df_long <- x %>%
+  pivot_longer(cols = c(regr.mse, regr.rmse), names_to = "metric", values_to = "value")
+
+# Plot as grouped horizontal bar chart
+ggplot(df_long, aes(x = task_id, y = value, fill = metric)) +
+  geom_col(position = "dodge", width = 0.6) +
+  scale_fill_manual(values = c("regr.mse" = "skyblue", "regr.rmse" = "tomato")) +
+  coord_flip() +  # Flip to make it horizontal
+  labs(
+    y = "Metric Value",
+    x = "Model (task_id)",
+    title = "Grouped Horizontal Bar Plot of Model Measures"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 11),
+    plot.title = element_text(size = 14, face = "bold"),
+    legend.title = element_blank()
+  )
 ### resample best learners ####
 bmr$score()$learner[[2]]$importance()
 
@@ -252,9 +280,9 @@ colnames(df) <- c("value", "count")
 
 # Step 4: Apply division rules
 df$adjusted_count <- with(df, ifelse(
-  grepl("_1$", value), count / 7,
+  grepl("_1$", value), count / 8,
   ifelse(grepl("_2$", value), count / 5,
-         ifelse(grepl("_3$", value), count / 5,
+         ifelse(grepl("_3$", value), count / 6,
                 ifelse(grepl("_4$", value), count / 5,
                        ifelse(grepl("_5$", value), count / 6, count)
                 )))))
