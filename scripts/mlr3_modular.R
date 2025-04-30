@@ -122,6 +122,9 @@ convert_to_numeric_or_factor <- function(df) {
 }
 
 converted_data <- convert_to_numeric_or_factor(train_data_clean)
+
+##TODO filter metrics with some kind of correlation metric or most important (20 odd) 
+
 ##make sure headers work in mlr3 ecosystem
 #converted_data<- non_sf
 colnames(converted_data)<-make.names(colnames(converted_data))
@@ -184,13 +187,13 @@ set_up_at_learners <- function(lrnr, SS) {
       resampling = rsmp("spcv_coords", folds = 3),
       measure = msr("regr.rmse"),
       search_space = lts(SS),
-      term_evals = 100,
+      term_evals = 100, ## still might not be enough! 
       terminator = trm("evals", n_evals = 100)
     )
   }
   
   afs = auto_fselector(
-    fselector = fs("genetic_search"),
+    fselector = fs("genetic_search"), ##TODO try forwards selection can't use paralisation but can set up max feature number 
     learner = at,
     resampling = rsmp("spcv_coords", folds = 3),
     measure = msr("regr.rmse"),
