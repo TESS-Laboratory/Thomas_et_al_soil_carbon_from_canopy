@@ -26,20 +26,20 @@ Plots- where any plots resulting from the analysis were saved.
 ### 1) LAI_images_to_dataframe.R 
 This script processes images taken with a hemispherical camerea lens and uses the package hemispheR to convert then into dataframe of coordinates with the relative LAI, canopy openness an
 
-### 2)lidar_analysis
+### 2) lidar_analysis.R
 Lidar analysis script to get canopy structure metrics from aiborne lidar data using lidR package  (best run on workstation)
 
-### 3) identify_rivers_raster
+### 3) identify_rivers_raster.R
  script to identify rivers and create nearest distance to water raster
 
-### 4)compile_rasters
+### 4) compile_rasters.R
 script to stack raster layers from GEE, QGIS, lidar_analysis and indentify_rivers_raster into one object
 
-### 5)create_complete_metric_table
+### 5) create_complete_metric_table.R
 Script to extract data from the raster stack and combine all data sets into one sf table for modelling with different lables for variables from different sources
 
-### 6)mlr3_modular
+### 6) mlr3_modular.R
 Script to automate the process of taking each combination of varbiables and automatically run them through a similtaneous autotuner and feature selection. then this script runs a comparrison of the best models for each variable combination. 
 
-### 7) v2_soil_glm
+### 7) v2_soil_glm.R
 This script is used for the mixed effects modelling to make an inference of the mechanistic relationships between canopy structure and soil Carbon
