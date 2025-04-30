@@ -21,3 +21,7 @@ Scripts- where all the scripts used in R to collect, clean and analyse data
 Data- where the raw and output data used in the analysis was stored
 
 Plots- where any plots resulting from the analysis were saved. 
+
+## The scripts should follow a sequence of:
+###1) LAI_images_to_dataframe.R 
+This script processes images taken with a hemispherical camerea and uses the package hemispheR to convert then into dataframe of coordinates with the relative LAI
