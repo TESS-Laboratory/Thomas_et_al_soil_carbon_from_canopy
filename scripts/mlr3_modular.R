@@ -27,8 +27,9 @@ install.packages("remotes")
 remotes::install_github("mlr-org/mlr3extralearners@*release")
 install.packages("glmnet")
 install.packages("kknn")
+install.packages("precrec")
 
-
+library(precrec)
 library(glmnet)
 library(kknn)
 library(mlr3extralearners)
@@ -187,18 +188,18 @@ set_up_at_learners <- function(lrnr, SS) {
       resampling = rsmp("spcv_coords", folds = 3),
       measure = msr("regr.rmse"),
       search_space = lts(SS),
-      term_evals = 100, ## still might not be enough! 
-      terminator = trm("evals", n_evals = 100)
+      term_evals = 10, ## still might not be enough! 
+      terminator = trm("evals", n_evals = 10)
     )
   }
   
   afs = auto_fselector(
-    fselector = fs("genetic_search"), ##TODO try forwards selection can't use paralisation but can set up max feature number 
+    fselector = fs("genetic_search"),# min_features = 3, max_features = 20, strategy = "sfs"), ##TODO try forwards selection can't use paralisation but can set up max feature number 
     learner = at,
     resampling = rsmp("spcv_coords", folds = 3),
     measure = msr("regr.rmse"),
-    term_evals = 100,
-    terminator = trm("evals", n_evals = 100)
+    term_evals = 10,
+    terminator = trm("evals", n_evals = 10)
   )
   
   return(afs)  
@@ -238,7 +239,7 @@ df_long <- x %>%
   pivot_longer(cols = c(regr.mse, regr.rmse), names_to = "metric", values_to = "value")
 
 # Plot as grouped horizontal bar chart
-ggplot(df_long, aes(x = task_id, y = value, fill = metric)) +
+p<- ggplot(df_long, aes(x = task_id, y = value, fill = metric)) +
   geom_col(position = "dodge", width = 0.6) +
   scale_fill_manual(values = c("regr.mse" = "skyblue", "regr.rmse" = "tomato")) +
   coord_flip() +  # Flip to make it horizontal
@@ -253,8 +254,9 @@ ggplot(df_long, aes(x = task_id, y = value, fill = metric)) +
     plot.title = element_text(size = 14, face = "bold"),
     legend.title = element_blank()
   )
+ggsave("Plots/barchart_of_red_performance.png", plot = p, width = 12, height = 8, dpi = 300)
 ### resample best learners ####
-bmr$score()$learner[[2]]$importance()
+##bmr$score()$learner[[2]]$importance()
 
 features_function<- function (i){
   features<-extract_inner_fselect_results(bmr)$features[[i]]
@@ -296,3 +298,43 @@ df <- df[order(-df$adjusted_count), ]
 print(df)
 ### plots and analysis ####
 write.csv(df, "Data/variable_presence_count.csv", row.names = FALSE)
+
+#autoplot(bmr$score(predictions = TRUE)$prediction_test[[x]])
+## grid plot of truth vs response
+plot_sims<- function (x, xy_lim= 8) {
+  df1 <- bmr$score(predictions = TRUE, ids = TRUE)[x]$prediction_test[[1]] |>
+    data.table::as.data.table()
+  df2 <- bmr$score(predictions = TRUE, ids = TRUE)[x+1]$prediction_test[[1]] |>
+            data.table::as.data.table()
+  df3 <- bmr$score(predictions = TRUE, ids = TRUE)[x+2]$prediction_test[[1]] |>
+    data.table::as.data.table()
+  
+  df<- rbind(df1, df2, df3)
+sim_id<- bmr$score(predictions = TRUE, ids = TRUE)[x]$task_id
+
+# get max of x and y
+max_xy <- round(max(
+  max(df$response, na.rm = TRUE),
+  max(df$truth, na.rm = TRUE)
+) / 10) * 10
+
+ p<-  df |>
+   ggplot() +
+   aes(y = response, x = truth) +
+   geom_point(col = "#f08a46", alpha = 0.9) +
+   #geom_density_2d(aes(col = after_stat(level))) +
+   scale_color_viridis_c(direction = -1, option = "mako") +
+   guides(alpha = "none", color = "none") +
+   geom_abline(slope = 1) +
+   coord_fixed(xlim = c(0, xy_lim), ylim = c(0, xy_lim)) +
+   labs(
+     title = paste0(sim_id),
+     x = "Observed Carbon",
+     y = "Modelled Carbon"
+   ) +
+   theme_linedraw()
+ return(p)
+}
+plot_list <- lapply(y, plot_sims)
+final_grid_plot <- wrap_plots(plot_list, ncol = 3, nrow = 4)
+ggsave("Plots/grid_of_truth_vs_response.png", plot = final_grid_plot, width = 12, height = 8, dpi = 300)
