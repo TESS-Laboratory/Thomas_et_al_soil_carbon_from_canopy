@@ -60,7 +60,7 @@ library(sf)
 library(patchwork)  # For arranging plots
 library(future)
 
-future::plan("multisession", workers = 4)
+future::plan("multisession", workers = 5)
 
 #' Create hyperparameter tuning space for xgboost
 #' @param prefix character prefix to add to parameter names - useful for
@@ -149,7 +149,7 @@ simulations <- list(
 # Define learners and search space Configurations
 students <- list(
   list(learner = lrn("regr.ranger", importance = "impurity"), SS = "regr.ranger.default"),
-  list(learner = lrn("regr.glm"), SS=NULL),
+  list(learner = lrn("regr.glm", importance = "impurity"), SS=NULL),
   #list(learner = lrn("regr.kknn"), SS = "regr.kknn.default"),
   list(learner = lrn("regr.rpart"), SS = "regr.rpart.default")
   #list(learner = lrn("regr.svm"), SS = "regr.svm.default")
@@ -188,8 +188,8 @@ set_up_at_learners <- function(lrnr, SS) {
       resampling = rsmp("spcv_coords", folds = 3),
       measure = msr("regr.rmse"),
       search_space = lts(SS),
-      term_evals = 10, ## still might not be enough! 
-      terminator = trm("evals", n_evals = 10)
+      term_evals = 100, ## still might not be enough! 
+      terminator = trm("evals", n_evals = 100)
     )
   }
   
@@ -198,8 +198,8 @@ set_up_at_learners <- function(lrnr, SS) {
     learner = at,
     resampling = rsmp("spcv_coords", folds = 3),
     measure = msr("regr.rmse"),
-    term_evals = 10,
-    terminator = trm("evals", n_evals = 10)
+    term_evals = 100,
+    terminator = trm("evals", n_evals = 100)
   )
   
   return(afs)  
@@ -229,7 +229,8 @@ x <- bmr$aggregate(measures = c(msr("regr.rmse"), msr("regr.mse"))) %>%
 
 m_obs<- mean(converted_data$wmean_percC_5)
 x$rRMSE<- x$regr.rmse/m_obs
-
+xforexport<- x%>% select(-"resample_result")
+write.csv(xforexport, "Data/sims_w_measures.csv", row.names = FALSE)
 x <- x %>%
   arrange(regr.rmse) %>%
   mutate(task_id = factor(task_id, levels = rev(task_id)))  # reversed for top-down
@@ -302,39 +303,75 @@ write.csv(df, "Data/variable_presence_count.csv", row.names = FALSE)
 #autoplot(bmr$score(predictions = TRUE)$prediction_test[[x]])
 ## grid plot of truth vs response
 plot_sims<- function (x, xy_lim= 8) {
-  df1 <- bmr$score(predictions = TRUE, ids = TRUE)[x]$prediction_test[[1]] |>
+  df1 <- bmr$score(predictions = TRUE, ids = TRUE)[x*3]$prediction_test[[1]] |>
     data.table::as.data.table()
-  df2 <- bmr$score(predictions = TRUE, ids = TRUE)[x+1]$prediction_test[[1]] |>
-            data.table::as.data.table()
-  df3 <- bmr$score(predictions = TRUE, ids = TRUE)[x+2]$prediction_test[[1]] |>
+  df2 <- bmr$score(predictions = TRUE, ids = TRUE)[x*3-1]$prediction_test[[1]] |>
+    data.table::as.data.table()
+  df3 <- bmr$score(predictions = TRUE, ids = TRUE)[x*3-2]$prediction_test[[1]] |>
     data.table::as.data.table()
   
   df<- rbind(df1, df2, df3)
-sim_id<- bmr$score(predictions = TRUE, ids = TRUE)[x]$task_id
-
-# get max of x and y
-max_xy <- round(max(
-  max(df$response, na.rm = TRUE),
-  max(df$truth, na.rm = TRUE)
-) / 10) * 10
-
- p<-  df |>
-   ggplot() +
-   aes(y = response, x = truth) +
-   geom_point(col = "#f08a46", alpha = 0.9) +
-   #geom_density_2d(aes(col = after_stat(level))) +
-   scale_color_viridis_c(direction = -1, option = "mako") +
-   guides(alpha = "none", color = "none") +
-   geom_abline(slope = 1) +
-   coord_fixed(xlim = c(0, xy_lim), ylim = c(0, xy_lim)) +
-   labs(
-     title = paste0(sim_id),
-     x = "Observed Carbon",
-     y = "Modelled Carbon"
-   ) +
-   theme_linedraw()
- return(p)
+  sim_id<- bmr$score(predictions = TRUE, ids = TRUE)[x*3]$task_id
+  
+  # get max of x and y
+  max_xy <- round(max(
+    max(df$response, na.rm = TRUE),
+    max(df$truth, na.rm = TRUE)
+  ) / 10) * 10
+  
+  p<-  df |>
+    ggplot() +
+    aes(y = response, x = truth) +
+    geom_point(col = "#f08a46", alpha = 0.9) +
+    #geom_density_2d(aes(col = after_stat(level))) +
+    scale_color_viridis_c(direction = -1, option = "mako") +
+    guides(alpha = "none", color = "none") +
+    geom_abline(slope = 1) +
+    coord_fixed(xlim = c(0, 8), ylim = c(0, 8)) +
+    labs(
+      title = paste0(sim_id),
+      x = "Observed Carbon",
+      y = "Modelled Carbon"
+    ) +
+    theme_linedraw()
+  return(p)
 }
 plot_list <- lapply(y, plot_sims)
 final_grid_plot <- wrap_plots(plot_list, ncol = 3, nrow = 4)
-ggsave("Plots/grid_of_truth_vs_response.png", plot = final_grid_plot, width = 12, height = 8, dpi = 300)
+ggsave("Plots/grid_of_truth_vs_response.png", plot = final_grid_plot, width = 20, height = 18, dpi = 300)
+
+### importance scores for variables in each simulation
+feature_importance<- function (x, xy_lim= 8) {
+  df1 <- bmr$score(ids = TRUE)$learner[[x*3]]$importance()|>
+    data.table::as.data.table( keep.rownames =  TRUE)
+  df2 <- bmr$score(ids = TRUE)$learner[[x*3-1]]$importance()|>
+    data.table::as.data.table( keep.rownames =  TRUE)
+  df3 <- bmr$score(ids = TRUE)$learner[[x*3-2]]$importance()|>
+    data.table::as.data.table( keep.rownames =  TRUE)
+  
+  df<- rbind(df1, df2, df3)
+  
+  summary_df <- df %>%
+    group_by(V1) %>%
+    summarise(mean_imp = mean(V2, na.rm = TRUE))%>%
+    arrange(desc(mean_imp))
+  
+  sim_id<- bmr$score(predictions = TRUE, ids = TRUE)[x*3]$task_id
+  
+  #summary_df$V1 <- factor(summary_df$V1, levels = summary_df$V1)
+  
+  # Plot
+  p<- ggplot(summary_df, aes(x = V1, y = mean_imp)) +
+    geom_col(fill = "steelblue") +
+    coord_flip() +
+    labs(
+      title = paste0(sim_id),
+      x = "variables",
+      y = "importance scores"
+    ) +
+    theme_minimal()
+  return(p)
+}
+plot_list <- lapply(y, feature_importance)
+importance_grid_plot <- wrap_plots(plot_list, ncol = 3, nrow = 4)
+ggsave("Plots/grid_of_importance_scores.png", plot = importance_grid_plot, width = 20, height = 18, dpi = 300)
