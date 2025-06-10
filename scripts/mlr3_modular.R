@@ -27,9 +27,8 @@ install.packages("remotes")
 remotes::install_github("mlr-org/mlr3extralearners@*release")
 install.packages("glmnet")
 install.packages("kknn")
-install.packages("precrec")
 
-library(precrec)
+
 library(glmnet)
 library(kknn)
 library(mlr3extralearners)
@@ -60,7 +59,7 @@ library(sf)
 library(patchwork)  # For arranging plots
 library(future)
 
-future::plan("multisession", workers = 5)
+future::plan("multisession", workers = 30)
 
 #' Create hyperparameter tuning space for xgboost
 #' @param prefix character prefix to add to parameter names - useful for
@@ -101,11 +100,12 @@ xgboost_ps <- function(prefix = NULL, add_paramset = NULL) {
 }
 
 set.seed(42)  # For reproducibility
+mlr_measures$get("regr.smape")
 
 ### read in data and set parameters ####
 
 #dataset
-samples_metrics<- read_sf("Data/soil_samples_w_complete_metrics.fgb")
+samples_metrics<- read_sf("~/workspace/PhD_work/soil_chapter/Data/soil_samples_w_complete_metrics.fgb")
 #train_data_rm<- select(train_data, where(~!any(is.na(.))))
 train_data_clean<- select(samples_metrics, -"wmean_acd_lidar_3", -"wmean_GF_3")%>%
   drop_na()
@@ -149,12 +149,13 @@ simulations <- list(
 # Define learners and search space Configurations
 students <- list(
   list(learner = lrn("regr.ranger", importance = "impurity"), SS = "regr.ranger.default"),
-  list(learner = lrn("regr.glm", importance = "impurity"), SS=NULL),
+  list(learner = lrn("regr.glm"), SS=NULL),
   #list(learner = lrn("regr.kknn"), SS = "regr.kknn.default"),
   list(learner = lrn("regr.rpart"), SS = "regr.rpart.default")
   #list(learner = lrn("regr.svm"), SS = "regr.svm.default")
   #list(learner = lrn("regr.xgboost"), SS = xgboost_ps)
 )
+
 
 
 ### create task list ####
@@ -186,7 +187,7 @@ set_up_at_learners <- function(lrnr, SS) {
       tuner = tnr("mbo"),
       learner = lrnr,
       resampling = rsmp("spcv_coords", folds = 3),
-      measure = msr("regr.rmse"),
+      measure = msr("regr.smape"),
       search_space = lts(SS),
       term_evals = 100, ## still might not be enough! 
       terminator = trm("evals", n_evals = 100)
@@ -194,10 +195,10 @@ set_up_at_learners <- function(lrnr, SS) {
   }
   
   afs = auto_fselector(
-    fselector = fs("genetic_search"),# min_features = 3, max_features = 20, strategy = "sfs"), ##TODO try forwards selection can't use paralisation but can set up max feature number 
+    fselector = fs("genetic_search"), ##TODO try forwards selection can't use paralisation but can set up max feature number 
     learner = at,
     resampling = rsmp("spcv_coords", folds = 3),
-    measure = msr("regr.rmse"),
+    measure = msr("regr.smape"),
     term_evals = 100,
     terminator = trm("evals", n_evals = 100)
   )
@@ -240,7 +241,7 @@ df_long <- x %>%
   pivot_longer(cols = c(regr.mse, regr.rmse), names_to = "metric", values_to = "value")
 
 # Plot as grouped horizontal bar chart
-p<- ggplot(df_long, aes(x = task_id, y = value, fill = metric)) +
+p<-ggplot(df_long, aes(x = task_id, y = value, fill = metric)) +
   geom_col(position = "dodge", width = 0.6) +
   scale_fill_manual(values = c("regr.mse" = "skyblue", "regr.rmse" = "tomato")) +
   coord_flip() +  # Flip to make it horizontal
@@ -255,7 +256,8 @@ p<- ggplot(df_long, aes(x = task_id, y = value, fill = metric)) +
     plot.title = element_text(size = 14, face = "bold"),
     legend.title = element_blank()
   )
-ggsave("Plots/barchart_of_red_performance.png", plot = p, width = 12, height = 8, dpi = 300)
+p
+ggsave("Plots/barchart_of_sim_performance.png", plot = p, width = 12, height = 8, dpi = 300)
 ### resample best learners ####
 ##bmr$score()$learner[[2]]$importance()
 
@@ -265,7 +267,8 @@ features_function<- function (i){
 }
 
 
-y<- x$nr
+y<- sort(x$nr)
+
 # y
 #[1]  2  5  9 11 14 16 19 22 27 30 31
 z<- c(y*3-2,y*3-1, y*3)
@@ -298,7 +301,7 @@ df <- df[order(-df$adjusted_count), ]
 # Print the sorted table
 print(df)
 ### plots and analysis ####
-write.csv(df, "Data/variable_presence_count.csv", row.names = FALSE)
+write.csv(df, "~/workspace/PhD_work/soil_chapter/Data/variable_presence_count.csv", row.names = FALSE)
 
 #autoplot(bmr$score(predictions = TRUE)$prediction_test[[x]])
 ## grid plot of truth vs response
@@ -351,17 +354,23 @@ feature_importance<- function (x, xy_lim= 8) {
   
   df<- rbind(df1, df2, df3)
   
+  
   summary_df <- df %>%
     group_by(V1) %>%
     summarise(mean_imp = mean(V2, na.rm = TRUE))%>%
-    arrange(desc(mean_imp))
+    arrange(desc(mean_imp)) %>%
+    mutate(V1 = factor(V1, levels = rev(unique(V1))))
   
+  
+  n_rows <- min(10, nrow(summary_df))  
+  
+  plot_df<- summary_df[1:n_rows, ]
   sim_id<- bmr$score(predictions = TRUE, ids = TRUE)[x*3]$task_id
   
-  #summary_df$V1 <- factor(summary_df$V1, levels = summary_df$V1)
+  
   
   # Plot
-  p<- ggplot(summary_df, aes(x = V1, y = mean_imp)) +
+  p<- ggplot(plot_df, aes(x = V1, y = mean_imp)) +
     geom_col(fill = "steelblue") +
     coord_flip() +
     labs(

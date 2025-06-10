@@ -12,25 +12,87 @@ library(tidyr)
 library(readr)
 library(ggplot2)
 library(ggrepel)
+library(stringr)
+library(purrr)
+set.seed(42)
 
-##PCA to reduce variables 
-# Drop geometry
+#### load data
+samples_metrics<- read_sf("~/workspace/PhD_work/soil_chapter/Data/soil_samples_w_complete_metrics.fgb")
+#train_data_rm<- select(train_data, where(~!any(is.na(.))))
+train_data_clean<- select(samples_metrics, -"wmean_acd_lidar_3", -"wmean_GF_3")%>%
+  drop_na()
+
+convert_to_numeric_or_factor <- function(df) {
+  df %>%
+    mutate(across(where(~ !inherits(., "sfc")), ~ {  # Ignore geometry columns
+      num_col <- suppressWarnings(as.numeric(.))
+      if (all(is.na(.) | !is.na(num_col))) {
+        num_col
+      } else {
+        as.factor(.)
+      }
+    }))
+}
+
+converted_data <- convert_to_numeric_or_factor(train_data_clean)
+
+##make sure headers work in mlr3 ecosystem
+colnames(converted_data)<-make.names(colnames(converted_data))
+
 retained_vars<- read_csv("~/workspace/PhD_work/soil_chapter/Data/variable_presence_count.csv")
 
-## filter for retained vars from ML
-fixed_vars <- retained_vars$value
-vars_present <- intersect(fixed_vars, colnames(converted_data))
-
-# Select only those columns from the retained in ML
+#### format table for glm ##### 
 df <- converted_data%>%
   st_drop_geometry()%>%
-  select(all_of(vars_present))%>%
-  select(-"wmean_percN_5")
+  select(-"wmean_percN_5", -"wmean_x15N_5", -"wmean_fhd_normal_2", -"wmean_scale_1", -"wmean_shot_number_2", -"wmean_rv_2", -"wmean_area_3", -"wmean_pground_3", -"wmean_plot.x", -"wmean_plot.y", -"wmean_x13C_5")
 
-# Encode factor columns to numeric
-df_numeric <- df %>%
-  select(where(is.numeric))%>%
-  select(where(~ sd(., na.rm = TRUE) != 0))
+# weighted means of soil grids
+compute_rowwise_weighted_means <- function(df) {
+  df_long <- df %>%
+    mutate(row_id = row_number()) %>%
+    pivot_longer(
+      cols = matches("^wmean_.*_mean_1$"),
+      names_to = "variable",
+      values_to = "value"
+    ) %>%
+    mutate(
+      value_type = str_extract(variable, "(?<=wmean_)[^_]+"),
+      depth_range = str_extract(variable, "\\d+\\.\\d+cm"),
+      depth_top = as.numeric(str_extract(depth_range, "^\\d+")),
+      depth_bottom = as.numeric(str_extract(depth_range, "(?<=\\.)\\d+")),
+      depth_thickness = depth_bottom - depth_top
+    )
+  
+  df_weighted <- df_long %>%
+    group_by(row_id, value_type) %>%
+    summarise(
+      weighted_mean = weighted.mean(value, depth_thickness, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    pivot_wider(
+      names_from = value_type,
+      values_from = weighted_mean,
+      names_glue = "wmean_{value_type}_1"
+    ) %>%
+    arrange(row_id)
+  
+  df_base <- df %>%
+    select(-matches("^wmean_.*_mean_1$")) %>%
+    mutate(row_id = row_number())
+  
+  result <- df_base %>%
+    left_join(df_weighted, by = "row_id") %>%
+    select(-row_id)
+  
+  return(result)
+}
+
+df_means <- compute_rowwise_weighted_means(df)
+
+df_numeric <- df_means %>%
+  mutate(across(where(~ !is.numeric(.)), ~ as.numeric(as.factor(.)))) %>%  # Convert non-numeric to numeric factors
+  select(where(is.numeric)) %>%                                            # Select all numeric columns
+  select(where(~ sd(., na.rm = TRUE) != 0))      
 
 
 
@@ -120,17 +182,18 @@ for (i in 1:ncol(loadings)) {
     pull(var)
   # Find the first variable not already selected
   for (var in ranked_vars) {
+    if (var == "wmean_percC_5") next  # Skip this specific variable
+    
     if (!(var %in% selected_vars)) {
       selected_vars <- c(selected_vars, var)
       break
     }
-  }
-  
-  # Stop once we have 20 unique variables
-  if (length(selected_vars) >= 20) break
-}
-df_selected <- df[, selected_vars]
-df_selected <- as.data.frame(st_drop_geometry(converted_data))[, selected_vars]
+    
+    # Stop once we have 20 unique variables
+    if (length(selected_vars) >= 20) break
+  }}
+df_selected <- df_numeric[, selected_vars]
+df_selected <- as.data.frame(st_drop_geometry(df_means))[, selected_vars]
 
 fixed_vars<- colnames(df_selected)
 #create a formula for chosen variables
@@ -138,22 +201,22 @@ formula_str <- paste("wmean_percC_5 ~", paste(fixed_vars, collapse = " + "))
 glm_formula <- as.formula(formula_str)
 
 ##compare performance of different family and links
-glm.gaus.log <- glm(glm_formula, data = converted_data, family= gaussian('log'))
-glm.gaus.id <- glm(glm_formula, data = converted_data, family = gaussian('identity'))
-glm.gam.log <- glm(glm_formula, data = converted_data, family = Gamma(link="log"))
-glm.gam.id<- glm(glm_formula, data = converted_data, family = Gamma(link="identity"))
+glm.gaus.log <- glm(glm_formula, data = df_means, family= gaussian('log'))
+glm.gaus.id <- glm(glm_formula, data = df_means, family = gaussian('identity'))
+glm.gam.log <- glm(glm_formula, data = df_means, family = Gamma(link="log"))
+glm.gam.id<- glm(glm_formula, data = df_means, family = Gamma(link="identity"))
 
 ## review
 compare_performance(glm.gam.log, glm.gaus.id, glm.gaus.log, glm.gam.id, verbose = FALSE, rank = TRUE)
-summary(glm.gam.log)
+summary(glm.gam.id)
 
-check_model(glm.gam.log)
+check_model(glm.gam.id)
 
-plot(resid(glm.gam.log, type='response'))
-lines(resid(glm.gam.log, type='response'), col='red')
+plot(resid(glm.gam.id, type='response'))
+lines(resid(glm.gam.id, type='response'), col='red')
 
 ##selected formula
-glm_model <- glm(glm_formula, data = converted_data, family = Gamma(link="log"))
+glm_model <- glm(glm_formula, data = df_means, family = Gamma(link="identity"))
 
 summary(glm_model)
 
@@ -186,8 +249,9 @@ ggplot(effects_df, aes(x = reorder(Predictor, Estimate), y = Estimate)) +
   coord_flip() +
   theme_minimal() +
   labs(
-    title = "Effect Sizes (Log Scale) from Gamma GLM",
+    title = "Effect Sizes from GLM",
     x = "Predictor",
-    y = "Log Coefficient Estimate ± 95% CI"
-  )
+    y = "Coefficient Estimate ± 95% CI"
+  )+
+  theme(text=element_text(size=16))
 
