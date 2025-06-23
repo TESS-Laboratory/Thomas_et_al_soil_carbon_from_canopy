@@ -96,7 +96,7 @@ theme_beautiful <- function() {
       )
     )
 }
-windowsFonts("Helvetica" = windowsFont("Helvetica")) # Ensure font is mapped correctly
+#windowsFonts("Helvetica" = windowsFont("Helvetica")) # Ensure font is mapped correctly
 
 set.seed(42)  # For reproducibility
 mlr_measures$get("regr.smape")
@@ -148,9 +148,9 @@ simulations <- list(
 # Define learners and search space Configurations
 students <- list(
   list(learner = lrn("regr.ranger", importance = "impurity", num.trees = to_tune(200, 1000)), SS = lts("regr.ranger.default")),#
-  list(learner = lrn("regr.glm"), SS=NULL)
+  list(learner = lrn("regr.glm"), SS=NULL),
   #list(learner = lrn("regr.kknn"), SS = "regr.kknn.default"),
-  #list(learner = lrn("regr.rpart"), SS = lts("regr.rpart.default"))
+  list(learner = lrn("regr.rpart", cp = to_tune(1e-04,   0.1)), SS = lts("regr.rpart.default"))
   #list(learner = lrn("regr.svm"), SS = "regr.svm.default")
   #list(learner = lrn("regr.xgboost"), SS = xgboost_ps)
 )
@@ -186,7 +186,7 @@ set_up_at_learners <- function(lrnr, SS) {
       tuner = tnr("grid_search", resolution = 5, batch_size = 25),
       learner = lrnr,
       resampling = rsmp("spcv_coords", folds = 3),
-      measure = msr("regr.rsq"),
+      measure = msr("regr.smape"),
       #search_space = SS,
       term_evals = 100, ## still might not be enough! 
       terminator = trm("evals", n_evals = 100)
@@ -197,7 +197,7 @@ set_up_at_learners <- function(lrnr, SS) {
     fselector = fs("genetic_search"), ##TODO try forwards selection can't use paralisation but can set up max feature number 
     learner = at,
     resampling = rsmp("spcv_coords", folds = 3),
-    measure = msr("regr.rsq"),
+    measure = msr("regr.smape"),
     term_evals = 100,
     terminator = trm("evals", n_evals = 100)
   )
