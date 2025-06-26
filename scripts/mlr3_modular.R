@@ -303,7 +303,9 @@ print(df)
 write.csv(df, "~/workspace/PhD_work/soil_chapter/Data/variable_presence_count.csv", row.names = FALSE)
 
 #autoplot(bmr$score(predictions = TRUE)$prediction_test[[x]])
-## grid plot of truth vs response
+## grid plot of truth vs response with point densoity hexagons
+
+density_breaks <- c(1, 20, 40, 60, 80, 100)
 plot_sims<- function (x, xy_lim= 8) {
   df1 <- bmr$score(predictions = TRUE, ids = TRUE)[x*3]$prediction_test[[1]] |>
     data.table::as.data.table()
@@ -324,22 +326,27 @@ plot_sims<- function (x, xy_lim= 8) {
   p<-  df |>
     ggplot() +
     aes(y = response, x = truth) +
-    geom_point(col = "#74AAAB", alpha = 0.9) +
-    #geom_density_2d(aes(col = after_stat(level))) +
-    scale_color_viridis_c(direction = -1, option = "mako") +
-    guides(alpha = "none", color = "none") +
+    geom_hex(binwidth = c(0.3, 0.3)) +
+    scale_fill_viridis_c(direction = 1, breaks = density_breaks) +
     geom_abline(slope = 1) +
-    coord_fixed(xlim = c(0, 8), ylim = c(0, 8)) +
+    coord_fixed(ratio = 1, xlim = c(0, 8), ylim = c(0, 8))+
     labs(
       title = paste0(sim_id),
       x = "Observed Carbon",
-      y = "Modelled Carbon"
+      y = "Modelled Carbon",
+      fill = "Number of points"
     ) +
-    theme_beautiful()
+    theme_beautiful()+
+    theme(
+      legend.position = c(0.2, 0.80),  # bottom right inside plot area
+      #legend.justification = c(1, 0),   # anchor the legend box to bottom right
+    )
   return(p)
 }
 plot_list <- lapply(y, plot_sims)
 final_grid_plot <- wrap_plots(plot_list, ncol = 3, nrow = 4)
+#save
+
 ggsave("Plots/grid_of_truth_vs_response.png", plot = final_grid_plot, width = 20, height = 18, dpi = 300)
 
 ### importance scores for variables in each simulation
