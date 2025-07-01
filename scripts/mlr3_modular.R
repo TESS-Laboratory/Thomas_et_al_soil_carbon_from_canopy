@@ -59,45 +59,44 @@ library(sf)
 library(patchwork)  # For arranging plots
 library(future)
 
-future::plan("multisession", workers = 30)
+future::plan("cluster", workers = 30)
 
-#' Create hyperparameter tuning space for xgboost
-#' @param prefix character prefix to add to parameter names - useful for
-#' ensemble models or where the xgboost leanrer id has been changed.
-#' @param add_paramsets an additional ParamSet object to add to the
-#' collection
-#' @return a paradox ParamSet object
-#' @export
-xgboost_ps <- function(prefix = NULL, add_paramset = NULL) {
-  prefix <- if (!is.null(prefix)) paste0(prefix, ".") else ""
-  if (!is.null(add_paramset)) paradox::assert_param_set(add_paramset)
-  paramset <- setNames(
-    list(
-      paradox::p_dbl(0.01, 0.5, logscale = TRUE), # eta
-      paradox::p_int(1, 1000), # nrounds
-      paradox::p_int(3, 12), # max_depth
-      paradox::p_dbl(0.1, 1), # subsample
-      paradox::p_dbl(0.1, 1), # colsample_bytree
-      paradox::p_dbl(0.1, 1), # colsample_bylevel
-      paradox::p_dbl(0.001, 700, logscale = TRUE), # alpha
-      paradox::p_dbl(0.001, 700, logscale = TRUE) # lambda
-    ),
-    paste0(
-      prefix,
-      c(
-        "eta",
-        "nrounds",
-        "max_depth",
-        "subsample",
-        "colsample_bytree",
-        "colsample_bylevel",
-        "alpha",
-        "lambda"
+## R code for creating a bespoke theme in ggplot that makes it much easier to produce beautiful publication-quality plots.
+#### Create Plotting theme ####
+theme_beautiful <- function() {
+  theme_bw() +
+    theme(
+      text = element_text(family = "Helvetica"),
+      axis.text = element_text(size = 8, color = "black"),
+      axis.title = element_text(size = 8, color = "black"),
+      axis.line.x = element_line(size = 0.3, color = "black"),
+      axis.line.y = element_line(size = 0.3, color = "black"),
+      axis.ticks = element_line(size = 0.3, color = "black"),
+      panel.border = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.y = element_blank(),
+      plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), units = , "cm"),
+      plot.title = element_text(
+        size = 8,
+        vjust = 1,
+        hjust = 0.5,
+        color = "black"
+      ),
+      legend.text = element_text(size = 8, color = "black"),
+      legend.title = element_text(size = 8, color = "black"),
+      legend.position = c(0.9, 0.9),
+      legend.key.size = unit(0.9, "line"),
+      legend.background = element_rect(
+        color = "black",
+        fill = "transparent",
+        size = 2,
+        linetype = "blank"
       )
     )
-  )
-  
 }
+windowsFonts("Helvetica" = windowsFont("Helvetica")) # Ensure font is mapped correctly
 
 set.seed(42)  # For reproducibility
 mlr_measures$get("regr.smape")
@@ -148,10 +147,10 @@ simulations <- list(
 
 # Define learners and search space Configurations
 students <- list(
-  list(learner = lrn("regr.ranger", importance = "impurity"), SS = "regr.ranger.default"),
-  list(learner = lrn("regr.glm"), SS=NULL),
+  list(learner = lrn("regr.ranger", importance = "impurity", num.trees = to_tune(200, 1000)), SS = lts("regr.ranger.default")),#
+  list(learner = lrn("regr.glm"), SS=NULL)
   #list(learner = lrn("regr.kknn"), SS = "regr.kknn.default"),
-  list(learner = lrn("regr.rpart"), SS = "regr.rpart.default")
+  #list(learner = lrn("regr.rpart"), SS = lts("regr.rpart.default"))
   #list(learner = lrn("regr.svm"), SS = "regr.svm.default")
   #list(learner = lrn("regr.xgboost"), SS = xgboost_ps)
 )
@@ -184,11 +183,11 @@ set_up_at_learners <- function(lrnr, SS) {
     at=lrnr
   } else{
     at = auto_tuner(
-      tuner = tnr("mbo"),
+      tuner = tnr("grid_search", resolution = 5, batch_size = 25),
       learner = lrnr,
       resampling = rsmp("spcv_coords", folds = 3),
-      measure = msr("regr.smape"),
-      search_space = lts(SS),
+      measure = msr("regr.rsq"),
+      #search_space = SS,
       term_evals = 100, ## still might not be enough! 
       terminator = trm("evals", n_evals = 100)
     )
@@ -198,7 +197,7 @@ set_up_at_learners <- function(lrnr, SS) {
     fselector = fs("genetic_search"), ##TODO try forwards selection can't use paralisation but can set up max feature number 
     learner = at,
     resampling = rsmp("spcv_coords", folds = 3),
-    measure = msr("regr.smape"),
+    measure = msr("regr.rsq"),
     term_evals = 100,
     terminator = trm("evals", n_evals = 100)
   )
@@ -243,14 +242,14 @@ df_long <- x %>%
 # Plot as grouped horizontal bar chart
 p<-ggplot(df_long, aes(x = task_id, y = value, fill = metric)) +
   geom_col(position = "dodge", width = 0.6) +
-  scale_fill_manual(values = c("regr.mse" = "skyblue", "regr.rmse" = "tomato")) +
+  scale_fill_manual(values = c("regr.mse" = "#74AAAB", "regr.rmse" = "#a9ddb9")) +
   coord_flip() +  # Flip to make it horizontal
   labs(
     y = "Metric Value",
     x = "Model (task_id)",
     title = "Grouped Horizontal Bar Plot of Model Measures"
   ) +
-  theme_minimal() +
+  theme_beautiful() +
   theme(
     axis.text.y = element_text(size = 11),
     plot.title = element_text(size = 14, face = "bold"),
@@ -325,7 +324,7 @@ plot_sims<- function (x, xy_lim= 8) {
   p<-  df |>
     ggplot() +
     aes(y = response, x = truth) +
-    geom_point(col = "#f08a46", alpha = 0.9) +
+    geom_point(col = "#74AAAB", alpha = 0.9) +
     #geom_density_2d(aes(col = after_stat(level))) +
     scale_color_viridis_c(direction = -1, option = "mako") +
     guides(alpha = "none", color = "none") +
@@ -336,7 +335,7 @@ plot_sims<- function (x, xy_lim= 8) {
       x = "Observed Carbon",
       y = "Modelled Carbon"
     ) +
-    theme_linedraw()
+    theme_beautiful()
   return(p)
 }
 plot_list <- lapply(y, plot_sims)
@@ -371,14 +370,14 @@ feature_importance<- function (x, xy_lim= 8) {
   
   # Plot
   p<- ggplot(plot_df, aes(x = V1, y = mean_imp)) +
-    geom_col(fill = "steelblue") +
+    geom_col(fill = "#74AAAB") +
     coord_flip() +
     labs(
       title = paste0(sim_id),
       x = "variables",
       y = "importance scores"
     ) +
-    theme_minimal()
+    theme_beautiful()
   return(p)
 }
 plot_list <- lapply(y, feature_importance)
