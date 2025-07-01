@@ -327,7 +327,7 @@ plot_sims<- function (x, xy_lim= 8) {
     ggplot() +
     aes(y = response, x = truth) +
     geom_hex(binwidth = c(0.3, 0.3)) +
-    scale_fill_viridis_c(direction = 1, breaks = density_breaks) +
+    scale_fill_viridis_c(direction = 1, breaks = density_breaks, limits = c(1, 70)) +
     geom_abline(slope = 1) +
     coord_fixed(ratio = 1, xlim = c(0, 8), ylim = c(0, 8))+
     labs(
@@ -387,6 +387,6 @@ feature_importance<- function (x, xy_lim= 8) {
     theme_beautiful()
   return(p)
 }
-plot_list <- lapply(y, feature_importance)
+plot_list <- lapply(v, feature_importance)
 importance_grid_plot <- wrap_plots(plot_list, ncol = 3, nrow = 4)
 ggsave("Plots/grid_of_importance_scores.png", plot = importance_grid_plot, width = 20, height = 18, dpi = 300)
