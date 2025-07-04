@@ -3,6 +3,9 @@
 #### set up environment ####
 install.packages("readr")
 install.packages("ggrepel")
+install.packages("broom")
+install.packages("ggeffects")
+install.packages("sjPlot")
 library(performance)
 library(sf)
 library(dplyr)
@@ -14,6 +17,8 @@ library(ggplot2)
 library(ggrepel)
 library(stringr)
 library(purrr)
+library(broom)
+library(ggeffects)
 set.seed(42)
 
 #### load data
@@ -238,9 +243,16 @@ effects_df <- data.frame(
   CI_low = conf_int[, 1],
   CI_high = conf_int[, 2]
 )
+effects_df <- effects_df %>%
+  mutate(
+    Estimate = sign(Estimate) * sqrt(abs(Estimate)),
+    CI_low = sign(CI_low) *sqrt(abs(CI_low)),
+    CI_high = sign(CI_high) *sqrt(abs(CI_high))
+  )
 
 # remove the intercept to focus only on predictors
 effects_df <- effects_df[effects_df$Predictor != "(Intercept)", ]
+
 
 # Plot
 ggplot(effects_df, aes(x = reorder(Predictor, Estimate), y = Estimate)) +
@@ -251,7 +263,26 @@ ggplot(effects_df, aes(x = reorder(Predictor, Estimate), y = Estimate)) +
   labs(
     title = "Effect Sizes from GLM",
     x = "Predictor",
-    y = "Coefficient Estimate ± 95% CI"
+    y = "Coefficient Estimate ± 95% CI (sqrt) "
   )+
   theme(text=element_text(size=16))
 
+##### investigating with hugh
+ plot(df_means$wmean_imean_3~df_means$wmean_percC_5)
+ plot(df_means$wmean_percC_5~df_means$wmean_imean_3)
+plot(df_means$wmean_percC_5~df_means$wmean_isd_3)
+ plot(df_means$wmean_percC_5~df_means$wmean_LAD_3)
+ lm(df_means$wmean_percC_5~df_means$wmean_LAD_3)
+
+glm.gam.log <- glm(df_means$wmean_percC_5~df_means$wmean_ocs_0.30cm_mean_1, family = gaussian(link="log"))
+summary(glm.gam.log)
+tidy(best_model, exponentiate = TRUE)
+check_model(glm.gam.log)
+
+ggplot(df_means)+
+  aes(x= wmean_ocs_1, y= wmean_percC_5)+
+  geom_point(alpha= 0.1)+
+  geom_smooth(method= "glm", method.args = list(family=gaussian(link="log")))
+
+P<-predict_response(best_model, terms= "wmean_LAD_3")
+plot(P)
