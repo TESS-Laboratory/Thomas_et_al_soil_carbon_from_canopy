@@ -6,6 +6,8 @@ install.packages("rsi")
 library(terra)
 library(rsi)
 library(patchwork)
+library(ggplot2)
+library(viridis)
 
 
 
@@ -71,18 +73,3 @@ aligned_raster <- terra::resample(mosaic_layers, SG, method = "bilinear")
 metrics<- c(SG, aligned_raster)
 
 writeRaster( metrics, "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif", overwrite = TRUE)
-metrics<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif")
-### make plots of maps
-p1<- plot(metrics$`bdod_5-15cm_mean_1`, main = "Bulk Density from SoilGrids")
-p2<- plot(metrics$isd_3, main = "Standard Deviation of Lidar Return Intensity")
-p3<- plot(metrics$year_of_last_fire_1, main = "Year of Last Fire")
-p4<- plot(metrics$imax_3, main = "Maximum of Lidar Return Intensity")
-p5<- plot(metrics$`ocs_0-30cm_mean_1`, main = "Organic Carbon Stocks from SoilGrids")
-p6<-plot(metrics$imean_3, main = "Mean of Lidar Return Intensity")
-p7<- plot(metrics$zskew_3, main = "Skew of Canopy Height")
-p8<- plot(metrics$LAD_3, main = "Leaf Area Density")
-
-p1 + p2 + p3 + p4 + p5 +p6 + p7 + p8 + plot_layout(nrow = 3)
-
-#### debugging ####
-
