@@ -255,7 +255,7 @@ effects_df <- effects_df[effects_df$Predictor != "(Intercept)", ]
 
 
 # Plot
-ggplot(effects_df, aes(x = reorder(Predictor, Estimate), y = Estimate)) +
+effect_plot<- ggplot(effects_df, aes(x = reorder(Predictor, Estimate), y = Estimate)) +
   geom_point() +
   geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2) +
   coord_flip() +
@@ -266,23 +266,50 @@ ggplot(effects_df, aes(x = reorder(Predictor, Estimate), y = Estimate)) +
     y = "Coefficient Estimate ± 95% CI (sqrt) "
   )+
   theme(text=element_text(size=16))
-
-##### investigating with hugh
- plot(df_means$wmean_imean_3~df_means$wmean_percC_5)
- plot(df_means$wmean_percC_5~df_means$wmean_imean_3)
-plot(df_means$wmean_percC_5~df_means$wmean_isd_3)
- plot(df_means$wmean_percC_5~df_means$wmean_LAD_3)
- lm(df_means$wmean_percC_5~df_means$wmean_LAD_3)
-
-glm.gam.log <- glm(df_means$wmean_percC_5~df_means$wmean_ocs_0.30cm_mean_1, family = gaussian(link="log"))
-summary(glm.gam.log)
 tidy(best_model, exponentiate = TRUE)
-check_model(glm.gam.log)
 
-ggplot(df_means)+
-  aes(x= wmean_ocs_1, y= wmean_percC_5)+
-  geom_point(alpha= 0.1)+
-  geom_smooth(method= "glm", method.args = list(family=gaussian(link="log")))
 
-P<-predict_response(best_model, terms= "wmean_LAD_3")
-plot(P)
+ggsave("Plots/effect_sizes.png", plot = effect_plot, width = 20, height = 18, dpi = 300)
+
+#####  further investigation
+
+simple_glm1 <- glm(wmean_percC_5~ wmean_min_distance_4* wmean_isd_3 *wmean_LAD_3 +wmean_zskew_3 ,data = df_means, family = Gamma(link="identity"))
+simple_glm2 <- glm(wmean_percC_5~ wmean_min_distance_4*wmean_isd_3 *wmean_LAD_3 *wmean_zskew_3 ,data = df_means, family = Gamma(link="identity"))
+anova(simple_glm1, simple_glm2, test = "Chisq")
+summary(simple_glm2)
+tidy(simple_glm2, exponentiate = TRUE)
+check_model(simple_glm)
+
+p1<-ggplot(df_means)+
+  aes(x= wmean_min_distance_4, y= wmean_percC_5)+
+  geom_point(alpha= 0.3)+
+  geom_smooth(method= "glm", method.args = list(family=gaussian(link="log")))+
+  theme_beautiful()
+p2<-ggplot(df_means)+
+  aes(x= wmean_isd_3, y= wmean_percC_5)+
+  geom_point(alpha= 0.3)+
+  geom_smooth(method= "glm", method.args = list(family=gaussian(link="log")))+
+  theme_beautiful()
+p3<-ggplot(df_means)+
+  aes(x=  wmean_LAD_3, y= wmean_percC_5)+
+  geom_point(alpha= 0.3)+
+  geom_smooth(method= "glm", method.args = list(family=gaussian(link="log")))+
+  theme_beautiful()
+p4<-ggplot(df_means)+
+  aes(x=  wmean_zskew_3, y= wmean_percC_5)+
+  geom_point(alpha= 0.3)+
+  geom_smooth(method= "glm", method.args = list(family=gaussian(link="log")))+
+  theme_beautiful()
+
+(p1+p2)/(p3 +p4)
+
+
+p5<-plot(predict_response(simple_glm, terms= "wmean_LAD_3")) +
+labs( title = NULL , x= "Mean Leaf Area Density", y= "Mean %C")
+p6<-plot(predict_response(simple_glm, terms= "wmean_min_distance_4")) +
+  labs( title = NULL , x= "Minimum Distance from Forest Edge (m)", y= "Mean %C")
+p7<-plot(predict_response(simple_glm, terms= "wmean_isd_3")) +
+  labs( title = NULL , x= "Standard Deviation of Intensity", y= "Mean %C")
+p8<-plot(predict_response(simple_glm, terms= "wmean_zskew_3")) +
+  labs( title = NULL , x= "Skew of Canopy Height", y= "Mean %C")
+p5+p6 +p7 +p8
