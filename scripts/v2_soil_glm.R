@@ -21,8 +21,14 @@ library(broom)
 library(ggeffects)
 set.seed(42)
 
+##set WD
+#online
+#fp<- "~/workspace/PhD_work/soil_chapter/Data/"
+#local
+fp<-"C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data/Data"
 #### load data
-samples_metrics<- read_sf("~/workspace/PhD_work/soil_chapter/Data/soil_samples_w_complete_metrics.fgb")
+samples_metrics<- read_sf(file.path(fp, "soil_samples_w_complete_metrics.fgb"))
+samples_metrics$wmean_min_distance_4<- samples_metrics$wmean_min_distance_4*1000
 #train_data_rm<- select(train_data, where(~!any(is.na(.))))
 train_data_clean<- select(samples_metrics, -"wmean_acd_lidar_3", -"wmean_GF_3")%>%
   drop_na()
