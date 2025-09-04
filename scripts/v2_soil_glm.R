@@ -281,12 +281,19 @@ ggsave("Plots/effect_sizes.png", plot = effect_plot, width = 20, height = 18, dp
 
 #####  further investigation
 
+simple_glm <- glm(wmean_percC_5~ wmean_min_distance_4+ wmean_isd_3 +wmean_LAD_3 +wmean_zskew_3 ,data = df_means, family = Gamma(link="identity"))
+=======
 simple_glm1 <- glm(wmean_percC_5~ wmean_min_distance_4*wmean_LAD_3 +wmean_isd_3 +wmean_zskew_3 ,data = df_means, family = Gamma(link="identity"))
+>>>>>>> main
 simple_glm2 <- glm(wmean_percC_5~ wmean_min_distance_4*wmean_isd_3 *wmean_LAD_3 *wmean_zskew_3 ,data = df_means, family = Gamma(link="identity"))
 anova(simple_glm1, simple_glm2, test = "Chisq")
 summary(simple_glm1)
 summary(simple_glm2)
+<<<<<<< HEAD
+
+=======
 tidy(simple_glm1, exponentiate = TRUE)
+>>>>>>> main
 tidy(simple_glm2, exponentiate = TRUE)
 check_model(simple_glm1)
 check_model(simple_glm2)
@@ -316,13 +323,13 @@ p4<-ggplot(df_means)+
 
 
 p5<-plot(predict_response(simple_glm, terms= "wmean_LAD_3")) +
-labs( title = NULL , x= "Mean Leaf Area Density", y= "Mean %C")
+labs( title = "a)" , x= "Mean Leaf Area Density", y= "Mean %C")
 p6<-plot(predict_response(simple_glm, terms= "wmean_min_distance_4")) +
-  labs( title = NULL , x= "Minimum Distance from Forest Edge (m)", y= "Mean %C")
+  labs( title = "b)", x= "Minimum Distance from Forest Edge (m)", y= "Mean %C")
 p7<-plot(predict_response(simple_glm, terms= "wmean_isd_3")) +
-  labs( title = NULL , x= "Standard Deviation of Intensity", y= "Mean %C")
+  labs( title = "c)" , x= "Standard Deviation of Intensity", y= "Mean %C")
 p8<-plot(predict_response(simple_glm, terms= "wmean_zskew_3")) +
-  labs( title = NULL , x= "Skew of Canopy Height", y= "Mean %C")
+  labs( title = "d)" , x= "Skew of Canopy Height", y= "Mean %C")
 p5+p6 +p7 +p8
 
 ### messing around with plotting
