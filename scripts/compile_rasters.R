@@ -2,8 +2,12 @@
 ## make sure all spatial data is in the same resolution or add terra::project to make it so before merging
 #this was performed with epsg:31980
 ### set up envoironment ####
+install.packages("rsi")
 library(terra)
 library(rsi)
+library(patchwork)
+library(ggplot2)
+library(viridis)
 
 
 
@@ -69,4 +73,3 @@ aligned_raster <- terra::resample(mosaic_layers, SG, method = "bilinear")
 metrics<- c(SG, aligned_raster)
 
 writeRaster( metrics, "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif", overwrite = TRUE)
-#### debugging ####

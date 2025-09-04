@@ -38,12 +38,16 @@ library(mlr3pipelines)
 library(praznik)
 library(mlr3tuningspaces)
 
+###set WD
+#workspace
 
+#local
+fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
 
 #### read in data ####
 metrics<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif")
 #update(x, names=TRUE)
-samples<- read_csv("Data/soil_meta_table.csv")
+samples<- read_csv(file.path(fp, "Data/soil_meta_table.csv"))
 GEDI<- read_csv("Data/Gedi_2b_dataframe.csv")
 colnames(GEDI) <- paste0(colnames(GEDI), "_2")
 GEDI<-rename(GEDI, Codigo = Codigo_2)

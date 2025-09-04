@@ -6,6 +6,7 @@ install.packages("ggrepel")
 install.packages("broom")
 install.packages("ggeffects")
 install.packages("sjPlot")
+install.packages("vegan")
 library(performance)
 library(sf)
 library(dplyr)
@@ -18,11 +19,18 @@ library(ggrepel)
 library(stringr)
 library(purrr)
 library(broom)
+library(vegan)
 library(ggeffects)
 set.seed(42)
 
+##set WD
+#online
+#fp<- "~/workspace/PhD_work/soil_chapter/Data/"
+#local
+fp<-"C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data/Data"
 #### load data
-samples_metrics<- read_sf("~/workspace/PhD_work/soil_chapter/Data/soil_samples_w_complete_metrics.fgb")
+samples_metrics<- read_sf(file.path(fp, "soil_samples_w_complete_metrics.fgb"))
+samples_metrics$wmean_min_distance_4<- samples_metrics$wmean_min_distance_4*1000
 #train_data_rm<- select(train_data, where(~!any(is.na(.))))
 train_data_clean<- select(samples_metrics, -"wmean_acd_lidar_3", -"wmean_GF_3")%>%
   drop_na()
@@ -44,7 +52,7 @@ converted_data <- convert_to_numeric_or_factor(train_data_clean)
 ##make sure headers work in mlr3 ecosystem
 colnames(converted_data)<-make.names(colnames(converted_data))
 
-retained_vars<- read_csv("~/workspace/PhD_work/soil_chapter/Data/variable_presence_count.csv")
+
 
 #### format table for glm ##### 
 df <- converted_data%>%
@@ -274,12 +282,21 @@ ggsave("Plots/effect_sizes.png", plot = effect_plot, width = 20, height = 18, dp
 #####  further investigation
 
 simple_glm <- glm(wmean_percC_5~ wmean_min_distance_4+ wmean_isd_3 +wmean_LAD_3 +wmean_zskew_3 ,data = df_means, family = Gamma(link="identity"))
+=======
+simple_glm1 <- glm(wmean_percC_5~ wmean_min_distance_4*wmean_LAD_3 +wmean_isd_3 +wmean_zskew_3 ,data = df_means, family = Gamma(link="identity"))
+>>>>>>> main
 simple_glm2 <- glm(wmean_percC_5~ wmean_min_distance_4*wmean_isd_3 *wmean_LAD_3 *wmean_zskew_3 ,data = df_means, family = Gamma(link="identity"))
 anova(simple_glm1, simple_glm2, test = "Chisq")
+summary(simple_glm1)
 summary(simple_glm2)
+<<<<<<< HEAD
 
+=======
+tidy(simple_glm1, exponentiate = TRUE)
+>>>>>>> main
 tidy(simple_glm2, exponentiate = TRUE)
-check_model(simple_glm)
+check_model(simple_glm1)
+check_model(simple_glm2)
 
 p1<-ggplot(df_means)+
   aes(x= wmean_min_distance_4, y= wmean_percC_5)+
@@ -314,3 +331,14 @@ p7<-plot(predict_response(simple_glm, terms= "wmean_isd_3")) +
 p8<-plot(predict_response(simple_glm, terms= "wmean_zskew_3")) +
   labs( title = "d)" , x= "Skew of Canopy Height", y= "Mean %C")
 p5+p6 +p7 +p8
+
+### messing around with plotting
+install.packages("jtools")
+library(jtools)
+lm3<-best_model
+plot_summs(lm3, scale = TRUE, size=3)
+
+
+plot_summs(lm3, scale = TRUE, plot.distributions = TRUE, 
+           inner_ci_level = .9,
+           color.class = "darkgreen")
