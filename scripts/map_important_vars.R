@@ -1,7 +1,8 @@
 
 ### make plots of maps to spatially interrogate understanding 
 ### import complete raster stack from complire rasters.R
-metrics<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif")
+fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
+metrics<- rast(file.path(fp, "combined_metrics_raster.tif"))
 study_site <- st_read("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Rio_Cautario/RC_boundary_EPSG4326/RC_boundary_EPSG4326.shp", crs =st_crs("EPSG:4326"))
 prj<- crs(metrics)
 

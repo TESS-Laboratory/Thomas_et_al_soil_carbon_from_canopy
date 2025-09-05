@@ -10,11 +10,11 @@ library(ggplot2)
 library(viridis)
 
 
-
+fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
 #### read in data ####
 vrt.folder <- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/RC" ##replace with location of vrt files computed by lidar_analysis.R
-tif.folder <-"C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data/SoilGrids"  ## Replace with the location of Tiff files (soil grids, rivers, ect)
-output<- "Data/Outputs" ## replace with desired location of output files
+tif.folder <- file.path(fp, "SoilGrids") ## Replace with the location of Tiff files (soil grids, rivers, ect)
+output<- file.path(fp, "Outputs") ## replace with desired location of output files
 
 
 ##add in function to read in lidar raster stack
@@ -72,4 +72,4 @@ aligned_raster <- terra::resample(mosaic_layers, SG, method = "bilinear")
 
 metrics<- c(SG, aligned_raster)
 
-writeRaster( metrics, "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif", overwrite = TRUE)
+writeRaster( metrics, file.path(fp, "combined_metrics_raster.tif"), overwrite = TRUE)

@@ -11,8 +11,9 @@ chewie_creds() # to set up your credentials
 chewie_health_check() # to check your credentials and cache setup.
 
 ### set up extraction parameters ####
-metrics<- rast("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/combined_metrics_raster.tif")
-samples<- read_csv("Data/soil_meta_table.csv")
+fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
+metrics<- rast(file.apth(fp, "combined_metrics_raster.tif"))
+samples<- read_csv(file,path(fp, "soil_meta_table.csv"))
 coordinates <- vect(samples[, c("plot.x", "plot.y", "Codigo")], geom = c("plot.x", "plot.y"), crs = "EPSG:4326")
 
 #align coordinates to rasters
@@ -68,4 +69,4 @@ chewie_show(
 )
 Gedi_repro<- st_transform(gedi_2B_sf, crs = proj)
 extracted_values <- st_join(coordinates, Gedi_repro,join= st_nearest_feature, bind = TRUE)
-st_write(extracted_values, "Data/Gedi_2b_dataframe.csv")
+st_write(extracted_values, file.path(fp, "Gedi_2b_dataframe.csv"))
