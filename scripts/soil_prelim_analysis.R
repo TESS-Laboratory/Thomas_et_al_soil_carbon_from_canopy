@@ -8,7 +8,8 @@ library(patchwork)
 library(broom)
 
 ##### read in data #####
-soil_samples <- read_csv("C:/workspace/PhD year 2/datasets/Rio_Cautario/Soil/Jess_Plinio_soil_samples.csv", 
+fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
+soil_samples <- read_csv(file.path(fp, "Soil/Jess_Plinio_soil_samples.csv"), 
                                      col_types = cols(massa = col_number(), 
                                                       `15N` = col_number(), `%N` = col_number(), 
                                                       `13C` = col_number(), `%C` = col_number(), 
@@ -41,7 +42,7 @@ merged_table <- soil_samples%>%
 cleaned_table <- merged_table %>%
   filter(!is.na(effective.LAI))
 
-write.csv(cleaned_table, file = "soil_meta_table.csv")
+write.csv(cleaned_table, file =file.path(fp, "soil_meta_table.csv"))
 
 
 ##### box plots #####

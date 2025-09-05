@@ -59,6 +59,7 @@ library(sf)
 library(patchwork)  # For arranging plots
 library(future)
 
+fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
 future::plan("cluster", workers = 30)
 
 ## R code for creating a bespoke theme in ggplot that makes it much easier to produce beautiful publication-quality plots.
@@ -104,7 +105,7 @@ mlr_measures$get("regr.smape")
 ### read in data and set parameters ####
 
 #dataset
-samples_metrics<- read_sf("~/workspace/PhD_work/soil_chapter/Data/soil_samples_w_complete_metrics.fgb")
+samples_metrics<- read_sf(file.path(fp, "soil_samples_w_complete_metrics.csv"))
 #train_data_rm<- select(train_data, where(~!any(is.na(.))))
 train_data_clean<- select(samples_metrics, -"wmean_acd_lidar_3", -"wmean_GF_3")%>%
   drop_na()
@@ -230,7 +231,7 @@ x <- bmr$aggregate(measures = c(msr("regr.rmse"), msr("regr.mse"))) %>%
 m_obs<- mean(converted_data$wmean_percC_5)
 x$rRMSE<- x$regr.rmse/m_obs
 xforexport<- x%>% select(-"resample_result")
-write.csv(xforexport, "Data/sims_w_measures.csv", row.names = FALSE)
+write.csv(xforexport, file.path(fp, "sims_w_measures.csv"), row.names = FALSE)
 x <- x %>%
   arrange(regr.rmse) %>%
   mutate(task_id = factor(task_id, levels = rev(task_id)))  # reversed for top-down
@@ -300,7 +301,7 @@ df <- df[order(-df$adjusted_count), ]
 # Print the sorted table
 print(df)
 ### plots and analysis ####
-write.csv(df, "~/workspace/PhD_work/soil_chapter/Data/variable_presence_count.csv", row.names = FALSE)
+write.csv(df, file.path(fp, "variable_presence_count.csv"), row.names = FALSE)
 
 #autoplot(bmr$score(predictions = TRUE)$prediction_test[[x]])
 ## grid plot of truth vs response with point densoity hexagons
