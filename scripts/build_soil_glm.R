@@ -29,7 +29,7 @@ set.seed(42)
 #local
 fp<-"C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
 #### load data
-samples_metrics<- read_sf(file.path(fp, "soil_samples_w_complete_metrics.csv"))
+samples_metrics<- read_sf(file.path(fp, "soil_meta_table.csv"))
 ##samples_metrics$wmean_min_distance_4<- samples_metrics$wmean_min_distance_4*1000 ##check if this is needed
 #train_data_rm<- select(train_data, where(~!any(is.na(.))))
 train_data_clean<- select(samples_metrics, -"wmean_acd_lidar_3", -"wmean_GF_3")%>%
