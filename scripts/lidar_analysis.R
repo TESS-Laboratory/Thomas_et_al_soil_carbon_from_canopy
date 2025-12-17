@@ -29,6 +29,7 @@ library(rsi)
 
 future::plan(future::multisession, workers = future::availableCores()-20)
 
+
 ###### read in functions ######
 
 #' @title Create a file if it does or does not exist.
@@ -282,6 +283,8 @@ stmetrics <- function(las, res) {
 ###### function to run all files through all functions #####
 run_everything<- function(laz_ctg){
   name<-basename(laz_ctg$filename)
+  laz_ctg@output_options$drivers$Raster$param$overwrite <- TRUE
+  laz_ctg@output_options$drivers$SpatRaster$param$overwrite <- TRUE
   dtm<- lidar_build_dtm(laz_ctg)
   norm<- lidar_build_norm_pnts(laz_ctg, dtm = dtm)
   opt_chunk_buffer(norm) <- 5
