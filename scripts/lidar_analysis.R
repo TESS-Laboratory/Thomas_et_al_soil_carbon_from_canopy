@@ -3,30 +3,31 @@
 
 
 #### set up environment ####
-install.packages("lidR")
-install.packages("filesstrings")
-install.packages("SpaDES")
-install.packages("terra")
-install.packages("geometry")
-install.packages("purrr")
-install.packages("rsi")
-
+#install.packages(c("rsi", "terra", "patchwork", "ggplot2", "viridis"), repos = "https://cloud.r-project.org")
+#install.packages(c("lidR", "stars", "sf"), repos = "https://cloud.r-project.org")
+#install.packages("filesstrings", repos = "https://cloud.r-project.org")
+#install.packages("SpaDES", repos = "https://cloud.r-project.org")
+#install.packages("terra", repos = "https://cloud.r-project.org")
+#install.packages("geometry", repos = "https://cloud.r-project.org")
+#install.packages("purrr", repos = "https://cloud.r-project.org")
+#install.packages("rsi", repos = "https://cloud.r-project.org")
+#install.packages("raster", repos = "https://cloud.r-project.org")
+#install.packages("tidyverse")
 library(lidR)
 library(geometry)
 #library(raster)
 library(terra)
 library(stars)
-library(sp)
 library(sf)
-library(tidyverse)
+#library(tidyverse)
 library(rlas)
 library(rgl)
-library(filesstrings)
-library(SpaDES)
+#library(filesstrings)
+#library(SpaDES)
 library(purrr)
 library(rsi)
 
-future::plan(future::multisession, workers = future::availableCores()-2)
+future::plan(future::multisession, workers = future::availableCores()-20)
 
 ###### read in functions ######
 
@@ -63,8 +64,8 @@ lidar_setup_ctg <- function(
     crs = NULL,
     .force = FALSE,
     proc_dir_root = here::here("Data")) {
- if(!dir.exists(proc_dir_root)) dir.create(proc_dir_root)
-   lidar_processing_dir <- create_my_dir(
+  if(!dir.exists(proc_dir_root)) dir.create(proc_dir_root)
+  lidar_processing_dir <- create_my_dir(
     file.path(proc_dir_root, proj_name, area_name)
   )
   cp_dest <- file.path(
@@ -99,7 +100,8 @@ lidar_setup_ctg <- function(
 
 
 ## list all lidar files
-las_dir<-"C:/workspace/PhD year 2/datasets/Rio_Cautario_ALS/LiDAR"
+#las_dir<-"C:/workspace/PhD year 2/datasets/Rio_Cautario_ALS/LiDAR"
+las_dir<-"~/workspace/PhD_work/soil_chapter/orig"
 file.name<- grep(list.files(path=las_dir, full.names = TRUE), pattern= '*.copc.laz', invert=TRUE, value=TRUE)
 
 ##set up and run function across all files
@@ -198,12 +200,12 @@ grid_rumple_index <- function(las, res) { # user-defined function
   return(pixel_metrics(las, rumple_index(X, Y, Z), res))
 }
 ##Test##
-#ctg <- catalog_list[[3]]
-#opt_chunk_buffer(ctg) <- 10
-#opt_chunk_alignment(ctg) <- c(100, 200)
+#ctg <- catalog_list[[2]]
+#opt_chunk_buffer(norm) <- 10
+#opt_chunk_alignment(norm) <- c(100, 200)
 #options <- list(raster_alignment = 20)
-#metrics <- catalog_map(ctg, grid_rumple_index, res = 20, .options = options)
-#plot(metrics, col = height.colors(50))
+#metrics_norm <- catalog_map(norm, grid_rumple_index, res = 20, .options = options)
+#plot(metrics_norm, col = height.colors(50))
 
 
 
@@ -223,7 +225,7 @@ LADCV <- function(z) {
 }
 
 
-#trial_lad <- pixel_metrics(ctg, ~LADCV(Z), res = 10)
+#trial_lad_norm <- pixel_metrics(norm, ~LADCV(Z), res = 10)
 
 
 
@@ -272,7 +274,7 @@ VCIfunc <- function(las, res) { # user-defined function
 stmetrics <- function(las, res) {
   return(pixel_metrics(las, .stdmetrics, res))
 } 
-#metrics <- catalog_map(ctg, stmetrics, res = 20, .options = options)
+#metrics <- catalog_map(norm, stmetrics, res = 20, .options = options)
 #plot(metrics, col = height.colors(50))
 
 
@@ -282,15 +284,15 @@ run_everything<- function(laz_ctg){
   name<-basename(laz_ctg$filename)
   dtm<- lidar_build_dtm(laz_ctg)
   norm<- lidar_build_norm_pnts(laz_ctg, dtm = dtm)
-  opt_chunk_buffer(laz_ctg) <- 5
-  opt_chunk_alignment(laz_ctg) <- c(100, 200)
+  opt_chunk_buffer(norm) <- 5
+  opt_chunk_alignment(norm) <- c(100, 200)
   options <- list(raster_alignment = 20)
   
-  lid_proc_dir <- dirname(laz_ctg@data$filename[1])
+  lid_proc_dir <- dirname(norm@data$filename[1])
   mod_name <- basename(lid_proc_dir)
   
   rump_dir <- file.path(lid_proc_dir, paste0(mod_name, "_rumple"))
-  lidR::opt_output_files(laz_ctg) <- paste(
+  lidR::opt_output_files(norm) <- paste(
     rump_dir,
     paste0(mod_name, "_rumple_{ID}"),
     sep = "/"
@@ -301,14 +303,14 @@ run_everything<- function(laz_ctg){
   )
   if (!file.exists(rump_vrt_check)) {
     cli::cli_alert_info("Creating rumple")
-    rump <- catalog_map(laz_ctg, grid_rumple_index, res = 20, .options = options)
+    rump <- catalog_map(norm, grid_rumple_index, res = 20, .options = options)
   } else {
     cli::cli_alert_info("rumple already exists")
     rump <- terra::rast(rump_vrt_check)
   }
   
   LAD_dir <- file.path(lid_proc_dir, paste0(mod_name, "_LAD"))
-  lidR::opt_output_files(laz_ctg) <- paste(
+  lidR::opt_output_files(norm) <- paste(
     LAD_dir,
     paste0(mod_name, "_LAD_{ID}"),
     sep = "/"
@@ -319,7 +321,7 @@ run_everything<- function(laz_ctg){
   )
   if (!file.exists(lad_vrt_check)) {
     cli::cli_alert_info("Creating LAD")
-    lad <- pixel_metrics(laz_ctg, ~LADCV(Z), res = 10)
+    lad <- pixel_metrics(norm, ~LADCV(Z), res = 10)
   } else {
     cli::cli_alert_info("LAD already exists")
     lad <- terra::rast(lad_vrt_check)
@@ -327,7 +329,7 @@ run_everything<- function(laz_ctg){
   
   
   GF_dir <- file.path(lid_proc_dir, paste0(mod_name, "_GF"))
-  lidR::opt_output_files(laz_ctg) <- paste(
+  lidR::opt_output_files(norm) <- paste(
     GF_dir,
     paste0(mod_name, "_GF_{ID}"),
     sep = "/"
@@ -338,14 +340,14 @@ run_everything<- function(laz_ctg){
   )
   if (!file.exists(GF_vrt_check)) {
     cli::cli_alert_info("Creating GF")
-    GF <- pixel_metrics(laz_ctg, ~GFCV(Z), res = 10)
+    GF <- pixel_metrics(norm, ~GFCV(Z), res = 10)
   } else {
     cli::cli_alert_info("GF already exists")
     GF <- terra::rast(GF_vrt_check)
   }
   
   ent_dir <- file.path(lid_proc_dir, paste0(mod_name, "_ent"))
-  lidR::opt_output_files(laz_ctg) <- paste(
+  lidR::opt_output_files(norm) <- paste(
     ent_dir,
     paste0(mod_name, "_ent_{ID}"),
     sep = "/"
@@ -356,14 +358,14 @@ run_everything<- function(laz_ctg){
   )
   if (!file.exists(ent_vrt_check)) {
     cli::cli_alert_info("Creating ent")
-    ent <- catalog_map(laz_ctg, Entropy, res = 20, .options = options)
+    ent <- catalog_map(norm, Entropy, res = 20, .options = options)
   } else {
     cli::cli_alert_info("ent already exists")
     ent <- terra::rast(ent_vrt_check)
   }
   
   VCI_dir <- file.path(lid_proc_dir, paste0(mod_name, "_VCI"))
-  lidR::opt_output_files(laz_ctg) <- paste(
+  lidR::opt_output_files(norm) <- paste(
     VCI_dir,
     paste0(mod_name, "_VCI_{ID}"),
     sep = "/"
@@ -374,14 +376,14 @@ run_everything<- function(laz_ctg){
   )
   if (!file.exists(VCI_vrt_check)) {
     cli::cli_alert_info("Creating VCI")
-    VCI <- catalog_map(laz_ctg, VCIfunc, res = 20, .options = options)
+    VCI <- catalog_map(norm, VCIfunc, res = 20, .options = options)
   } else {
     cli::cli_alert_info("VCI already exists")
     VCI <- terra::rast(VCI_vrt_check)
   }
   
   std_dir <- file.path(lid_proc_dir, paste0(mod_name, "_std"))
-  lidR::opt_output_files(laz_ctg) <- paste(
+  lidR::opt_output_files(norm) <- paste(
     std_dir,
     paste0(mod_name, "_std_{ID}"),
     sep = "/"
@@ -392,7 +394,7 @@ run_everything<- function(laz_ctg){
   )
   if (!file.exists(std_vrt_check)) {
     cli::cli_alert_info("Creating std")
-    std <- catalog_map(laz_ctg, stmetrics, res = 20, .options = options)
+    std <- catalog_map(norm, stmetrics, res = 20, .options = options)
   } else {
     cli::cli_alert_info("STD already exists")
     std <- terra::rast(std_vrt_check)
@@ -409,7 +411,7 @@ run_everything<- function(laz_ctg){
                              band_names = c("rump","LAD", "GF", "ent", "VCI", "zmax", 
                                             "zmean","zsd","zskew","zkurt","zentropy",
                                             "pzabovezmean", "pzabove2","zq5","zq10","zq15", "zq20",        
-                                             "zq25" ,"zq30","zq35","zq40","zq45","zq50",       
+                                            "zq25" ,"zq30","zq35","zq40","zq45","zq50",       
                                             "zq55","zq60","zq65","zq70","zq75","zq80",        
                                             "zq85","zq90","zq95","zpcum1","zpcum2","zpcum3",      
                                             "zpcum4","zpcum5","zpcum6","zpcum7","zpcum8","zpcum9",      
@@ -417,18 +419,18 @@ run_everything<- function(laz_ctg){
                                             "ipground","ipcumzq10","ipcumzq30","ipcumzq50","ipcumzq70","ipcumzq90",   
                                             "p1th","p2th","p3th","p4th","p5th","pground",    
                                             "n","area"),
-                                 output_filename = paste(comp_dir))
- 
+                             output_filename = paste(comp_dir))
+  
   
   return(comp)
 } 
-  
+
 
 ##Test##
 #trial_stack<- run_everything(catalog_list[[2]])
 #stack<- terra:: rast(trial_stack)
 
-stack_list<-ctg_list%>%
+stack_list<-catalog_list%>%
   map(run_everything)
 
 
