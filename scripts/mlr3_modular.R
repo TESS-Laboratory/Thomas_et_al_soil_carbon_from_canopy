@@ -124,8 +124,6 @@ convert_to_numeric_or_factor <- function(df) {
 
 converted_data <- convert_to_numeric_or_factor(train_data_clean)
 
-##TODO filter metrics with some kind of correlation metric or most important (20 odd) 
-
 ##make sure headers work in mlr3 ecosystem
 #converted_data<- non_sf
 colnames(converted_data)<-make.names(colnames(converted_data))
@@ -231,7 +229,7 @@ x <- bmr$aggregate(measures = c(msr("regr.rmse"), msr("regr.mse"))) %>%
 m_obs<- mean(converted_data$wmean_percC_5)
 x$rRMSE<- x$regr.rmse/m_obs
 xforexport<- x%>% select(-"resample_result")
-write.csv(xforexport, file.path(fp, "sims_w_measures.csv"), row.names = FALSE)
+write.csv(xforexport, file.path(fp, "sims_w_measures_2.csv"), row.names = FALSE)
 x <- x %>%
   arrange(regr.rmse) %>%
   mutate(task_id = factor(task_id, levels = rev(task_id)))  # reversed for top-down
@@ -257,7 +255,7 @@ p<-ggplot(df_long, aes(x = task_id, y = value, fill = metric)) +
     legend.title = element_blank()
   )
 p
-ggsave("Plots/barchart_of_sim_performance.png", plot = p, width = 12, height = 8, dpi = 300)
+ggsave("Plots/barchart_of_sim_performance_2.png", plot = p, width = 12, height = 8, dpi = 300)
 ### resample best learners ####
 ##bmr$score()$learner[[2]]$importance()
 
@@ -301,7 +299,7 @@ df <- df[order(-df$adjusted_count), ]
 # Print the sorted table
 print(df)
 ### plots and analysis ####
-write.csv(df, file.path(fp, "variable_presence_count.csv"), row.names = FALSE)
+write.csv(df, file.path(fp, "variable_presence_count_2.csv"), row.names = FALSE)
 
 #autoplot(bmr$score(predictions = TRUE)$prediction_test[[x]])
 ## grid plot of truth vs response with point densoity hexagons
@@ -348,7 +346,7 @@ plot_list <- lapply(y, plot_sims)
 final_grid_plot <- wrap_plots(plot_list, ncol = 3, nrow = 4)
 #save
 
-ggsave("Plots/grid_of_truth_vs_response.png", plot = final_grid_plot, width = 20, height = 18, dpi = 300)
+ggsave("Plots/grid_of_truth_vs_response_2.png", plot = final_grid_plot, width = 20, height = 18, dpi = 300)
 
 ### importance scores for variables in each simulation
 feature_importance<- function (x, xy_lim= 8) {
@@ -390,4 +388,4 @@ feature_importance<- function (x, xy_lim= 8) {
 }
 plot_list <- lapply(v, feature_importance)
 importance_grid_plot <- wrap_plots(plot_list, ncol = 3, nrow = 4)
-ggsave("Plots/grid_of_importance_scores.png", plot = importance_grid_plot, width = 20, height = 18, dpi = 300)
+ggsave("Plots/grid_of_importance_scores_2.png", plot = importance_grid_plot, width = 20, height = 18, dpi = 300)

@@ -2,68 +2,58 @@
 ## make sure all spatial data is in the same resolution or add terra::project to make it so before merging
 #this was performed with epsg:31980
 ### set up envoironment ####
-install.packages(c("rsi", "terra", "patchwork", "ggplot2", "viridis"), repos = "https://cloud.r-project.org")
+install.packages("rsi")
 library(terra)
 library(rsi)
 library(patchwork)
 library(ggplot2)
 library(viridis)
 
-fp<-"~/workspace/PhD_work/soil_chapter/Data" ##workstation
-#fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
+
+fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
 #### read in data ####
-vrt.folder <- file.path("~/workspace/PhD_work/Thomas_et_al_soil_carbon_from_canopy/Data/RC") ##replace with location of vrt files computed by lidar_analysis.R
+vrt.folder <- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/RC" ##replace with location of vrt files computed by lidar_analysis.R
 tif.folder <- file.path(fp, "SoilGrids") ## Replace with the location of Tiff files (soil grids, rivers, ect)
-output<- file.path("~/workspace/PhD_work/Thomas_et_al_soil_carbon_from_canopy/Data") ## replace with desired location of output files
+output<- file.path(fp, "Outputs") ## replace with desired location of output files
 
 
 ##add in function to read in lidar raster stack
 # Function to list all files in each subfolder of a specified folder
 list_files_by_subfolder <- function(folder_path) {
-  # Get immediate subfolders
+  # Get all nested subfolders
   subfolders <- list.dirs(folder_path, full.names = TRUE, recursive = TRUE)
-  
   # Initialize output list
-  files_by_subfolder <- list()
+  rasters<- list()
   
+  #find right files (end in comp.vrt)
   for (subfolder in subfolders) {
     
-    # Find .tif files in this subfolder
+    # Find comp.vrt files in this subfolder
     files <- list.files(
       subfolder,
       full.names = TRUE,
-      pattern = "\\.tif$"
+      pattern = "\\comp.vrt$"
     )
     
     # Skip folders with no matching files
     if (length(files) == 0) next
     
-    # Use folder name (not undefined 'folder') as list name
-    rasters<- list()
-    for (file in files) {
-      R<- rast(file)
-      rasters[[file]]<- R
-    }
+    # if file does exist, add raster to list 
     
-    folder_name <- basename(subfolder)
     
-    # Read files as SpatRaster
-    files_by_subfolder[[folder_name]] <- mosaic(sprc(rasters))
+    rasters[[files]]<- rast(files)
   }
   
-  return(files_by_subfolder)
+  return(rasters)
 }
 
 
 # Replace with the actual folder path
 nested_files_list <- list_files_by_subfolder(vrt.folder)
-#names(nested_files_list)<- NULL
+
+names(nested_files_list)<- NULL
 #### merge rasters ####
-res<- nested_files_list[[1]]
-lidar_aligned <- lapply(nested_files_list, terra::resample, y= res, method = "bilinear")
-raster_list <- sprc(lidar_aligned)  # Read all rasters as stacks
-
-
+raster_list <- sprc(nested_files_list)  # Read all rasters as stacks
 mos<- mosaic(raster_list, overwrite = TRUE)
 
 

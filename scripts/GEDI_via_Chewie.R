@@ -1,19 +1,22 @@
 ### script to obtain GEDI data via chewie
 ### set up environment ###
-# install.packages("pak")
-pak::pkg_install("Permian-Global-Research/chewie")
-install.packages('mapview')
+#install.packages("pak")
+#pak::pkg_install("Permian-Global-Research/chewie")
+#install.packages('mapview')
 library(chewie)
 library(dplyr)
+library(tidyverse)
 library(sf)
+library(terra)
 library(mapview)
-chewie_creds() # to set up your credentials
-chewie_health_check() # to check your credentials and cache setup.
-
+library(stars)
+#chewie_creds() # to set up your credentials
+#chewie::chewie_creds(netrc='C:/Users/jpt215/.chewie/.netrc')
+#chewie_health_check() # to check your credentials and cache setup.
 ### set up extraction parameters ####
 fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
-metrics<- rast(file.apth(fp, "combined_metrics_raster.tif"))
-samples<- read_csv(file,path(fp, "soil_meta_table.csv"))
+metrics<- rast(file.path(fp, "combined_metrics_raster.tif"))
+samples<- read_csv(file.path(fp, "soil_meta_table.csv"))
 coordinates <- vect(samples[, c("plot.x", "plot.y", "Codigo")], geom = c("plot.x", "plot.y"), crs = "EPSG:4326")
 
 #align coordinates to rasters
@@ -50,6 +53,7 @@ gedi_2B_sf <- grab_gedi(gedi_2B_search) |>
     fhd_normal,
     pai,
     pgap_theta,
+    rh100,
     rv,
     dplyr::starts_with("cover_z"),
     dplyr::starts_with("pai_z"),
@@ -68,5 +72,6 @@ chewie_show(
   aoi_color = "white"
 )
 Gedi_repro<- st_transform(gedi_2B_sf, crs = proj)
-extracted_values <- st_join(coordinates, Gedi_repro,join= st_nearest_feature, bind = TRUE)
+coords<- st_as_sf(coordinates)
+extracted_values <- st_join(coords, Gedi_repro,join= st_nearest_feature, bind = TRUE)
 st_write(extracted_values, file.path(fp, "Gedi_2b_dataframe.csv"))

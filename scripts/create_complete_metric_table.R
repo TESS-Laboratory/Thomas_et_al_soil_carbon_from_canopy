@@ -23,7 +23,7 @@ library(dplyr)
 library(performance)
 library(GGally)
 library(sf)
-library(tidyverse)
+library(tidyverse)#used
 library(fastDummies)
 library(vegan)
 library(mlr3)
@@ -89,4 +89,4 @@ samples_metrics <- clean_headers(merged_spatial_df)%>%
 samples_metrics <- samples_metrics %>%
   rename_with(~ ifelse(grepl("^\\d", .), paste0("x", .), .))
 
-st_write(samples_metrics, file.path(fp, "soil_samples_w_complete_metrics.csv"), delete_dsn= TRUE)
+st_write(samples_metrics, file.path(fp, "soil_samples_w_complete_metrics_2.fgb"), delete_dsn= TRUE)

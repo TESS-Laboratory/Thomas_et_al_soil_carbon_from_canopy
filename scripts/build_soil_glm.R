@@ -7,6 +7,8 @@ install.packages("broom")
 install.packages("ggeffects")
 install.packages("sjPlot")
 install.packages("vegan")
+install.packages("gtsummary")
+library(gtsummary)
 library(performance)
 library(sf)
 library(dplyr)
@@ -29,11 +31,53 @@ set.seed(42)
 #local
 fp<-"C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
 #### load data
-samples_metrics<- read_sf(file.path(fp, "soil_meta_table.csv"))
-##samples_metrics$wmean_min_distance_4<- samples_metrics$wmean_min_distance_4*1000 ##check if this is needed
-#train_data_rm<- select(train_data, where(~!any(is.na(.))))
-train_data_clean<- select(samples_metrics, -"wmean_acd_lidar_3", -"wmean_GF_3")%>%
-  drop_na()
+samples_metrics<- read_sf(file.path(fp, "soil_samples_w_complete_metrics_2.fgb"))
+samples_metrics <- samples_metrics|>
+  rename_with(~ sub("^wmean_", "", .x))
+train_data_clean<- dplyr::select(samples_metrics, -c("acd_lidar_1", "rv_2","shot_number_2","plot.x", 
+                                                     "plot.y",  "scale_1" ,
+                                              ,"date_time_2" ,"light.conditions","n_3","GEDI.footprints" ,"CperN","x13C","lyr.1_1","Codigo", "Age.category" ,"Age", "Age_rectified" ,"State" ,"Degradation"))  
+
+
+train_data<- train_data_clean|>
+  dplyr::rename(effective.LAI_4 = effective.LAI,
+                actual.LAI_4 = actual.LAI,
+                clumping.index_4 = clumping.index,
+                LXG1_4 = LXG1,
+                LXG2_4 = LXG2,
+                MTA_4 = MTA,
+                canopy.openness_4 = canopy.openness,
+                min_distance_4= min_distance,
+                Profundidade_cm_5 =  Profundidade_cm_,
+                x15N_5 = x15N,
+                percN_5 = percN)
+
+
+filter_values <- c("0-5","5-10","10-20","20-30")
+filtered_data <- train_data |>
+  dplyr::mutate(Profundidade_cm_5 = as.character(Profundidade_cm_5))|>
+  dplyr::filter( Profundidade_cm_5 %in% filter_values)
+## add weights for means
+weight_table <- filtered_data %>%
+  dplyr::mutate(weight = dplyr::case_when(
+    Profundidade_cm_5== "0-5" ~ 1,
+    Profundidade_cm_5 =="5-10" ~ 1,
+    Profundidade_cm_5 == "10-20" ~ 2,
+    Profundidade_cm_5 == "20-30" ~2
+  ))
+
+# Summarize the data by unique IDs with a weighted mean of SOC
+summary_data <- weight_table %>%
+  dplyr::group_by(id_clean) %>%
+  dplyr::summarise( percC= sum(percC * weight) / sum(weight),
+                    across(
+                      .cols = -c(percC, weight, geometry),
+                      .fns  = first
+                    ),
+                    .groups = "drop"
+  )|>
+  select(-c("Profundidade_cm_5", "id_clean"))
+
 
 convert_to_numeric_or_factor <- function(df) {
   df %>%
@@ -47,7 +91,7 @@ convert_to_numeric_or_factor <- function(df) {
     }))
 }
 
-converted_data <- convert_to_numeric_or_factor(train_data_clean)
+converted_data <- convert_to_numeric_or_factor(summary_data)
 
 ##make sure headers work in mlr3 ecosystem
 colnames(converted_data)<-make.names(colnames(converted_data))
@@ -57,24 +101,27 @@ colnames(converted_data)<-make.names(colnames(converted_data))
 #### format table for glm ##### 
 df <- converted_data%>%
   st_drop_geometry()%>%
-  select(-"wmean_percN_5", -"wmean_x15N_5", -"wmean_fhd_normal_2", -"wmean_scale_1", -"wmean_shot_number_2", -"wmean_rv_2", -"wmean_area_3", -"wmean_pground_3", -"wmean_plot.x", -"wmean_plot.y", -"wmean_x13C_5")
+  select(-"percN_5", -"x15N_5", -"fhd_normal_2", -"pground_3")
 
 # weighted means of soil grids
 compute_rowwise_weighted_means <- function(df) {
+  filter_values<- c("0.5cm", "5.15cm", "15.30cm")
+  
   df_long <- df %>%
     mutate(row_id = row_number()) %>%
     pivot_longer(
-      cols = matches("^wmean_.*_mean_1$"),
+      cols = matches("*_mean_1$"),
       names_to = "variable",
       values_to = "value"
     ) %>%
     mutate(
-      value_type = str_extract(variable, "(?<=wmean_)[^_]+"),
+      value_type = str_extract(variable, "[^_]+"),
       depth_range = str_extract(variable, "\\d+\\.\\d+cm"),
       depth_top = as.numeric(str_extract(depth_range, "^\\d+")),
-      depth_bottom = as.numeric(str_extract(depth_range, "(?<=\\.)\\d+")),
+      depth_bottom = as.numeric(str_extract(depth_range, "(?<=\\.)\\d+(?=cm)")),
       depth_thickness = depth_bottom - depth_top
-    )
+    )|>
+      dplyr::filter(depth_range %in% filter_values)
   
   df_weighted <- df_long %>%
     group_by(row_id, value_type) %>%
@@ -90,7 +137,7 @@ compute_rowwise_weighted_means <- function(df) {
     arrange(row_id)
   
   df_base <- df %>%
-    select(-matches("^wmean_.*_mean_1$")) %>%
+    select(-matches("*_mean_1$")) %>%
     mutate(row_id = row_number())
   
   result <- df_base %>%
@@ -105,7 +152,9 @@ df_means <- compute_rowwise_weighted_means(df)
 df_numeric <- df_means %>%
   mutate(across(where(~ !is.numeric(.)), ~ as.numeric(as.factor(.)))) %>%  # Convert non-numeric to numeric factors
   select(where(is.numeric)) %>%                                            # Select all numeric columns
-  select(where(~ sd(., na.rm = TRUE) != 0))      
+  select(where(~ sd(., na.rm = TRUE) != 0))|>
+  select(-matches("^zq|cover_z|pai_z|pavd_z"))|>
+  drop_na()
 
 
 
@@ -159,10 +208,10 @@ bi_plot_func<- function(PCA_scores) {
   p<-ggplot(species_scores, aes(x = PC1_scaled, y = PC2_scaled, label = var)) +
     geom_segment(aes(x = 0, y = 0, xend = PC1_scaled, yend = PC2_scaled, color = cos2),
                  arrow = arrow(length = unit(0.2, "cm")), linewidth = 1) +
-    geom_text_repel(nudge_x = 0.02, nudge_y = 0.02, size = 3,max.overlaps = 5, 
+    geom_text_repel(nudge_x = 0.02, nudge_y = 0.02, size = 8,max.overlaps = 5, 
                     box.padding = 0.35, point.padding = 0.5) +
     scale_color_viridis_c(option = "C") +
-    labs(title = "PCA Biplot with cos² from vegan::rda",
+    labs(title = "B",
          x = "PC1",
          y = "PC2",
          color = "cos²") +
@@ -171,7 +220,9 @@ bi_plot_func<- function(PCA_scores) {
 }
 
 full_plot<- bi_plot_func(rda_scores)
+ggsave("Plots/PCA_full_plot.png", plot = full_plot, width = 20, height = 18, dpi = 300)
 CS_plot<- bi_plot_func(CSrda_scores)
+ggsave("Plots/PCA_CS_plot.png", plot = CS_plot, width = 20, height = 18, dpi = 300)
 
 ### chatGPT script for using PCA to remove vars with high collinearity
 
@@ -195,7 +246,7 @@ for (i in 1:ncol(loadings)) {
     pull(var)
   # Find the first variable not already selected
   for (var in ranked_vars) {
-    if (var == "wmean_percC_5") next  # Skip this specific variable
+    if (var == "percC") next  # Skip this specific variable
     
     if (!(var %in% selected_vars)) {
       selected_vars <- c(selected_vars, var)
@@ -210,7 +261,7 @@ df_selected <- as.data.frame(st_drop_geometry(df_means))[, selected_vars]
 
 fixed_vars<- colnames(df_selected)
 #create a formula for chosen variables
-formula_str <- paste("wmean_percC_5 ~", paste(fixed_vars, collapse = " + "))
+formula_str <- paste("percC ~", paste(fixed_vars, collapse = " + "))
 glm_formula <- as.formula(formula_str)
 
 ##compare performance of different family and links
@@ -221,137 +272,74 @@ glm.gam.id<- glm(glm_formula, data = df_means, family = Gamma(link="identity"))
 
 ## review
 compare_performance(glm.gam.log, glm.gaus.id, glm.gaus.log, glm.gam.id, verbose = FALSE, rank = TRUE)
-summary(glm.gam.id)
+summary(glm.gam.log)
 
-check_model(glm.gam.id)
+check_model(glm.gam.log)
 
 plot(resid(glm.gam.id, type='response'))
 lines(resid(glm.gam.id, type='response'), col='red')
 
 ##selected formula
-glm_model <- glm(glm_formula, data = df_means, family = Gamma(link="identity"))
+glm_model <- glm(glm_formula, data = df_means, family = Gamma(link="log"))
 
 summary(glm_model)
-
+TableS3<- tidy(glm_model, exponentiate = TRUE)
+write.csv(TableS3, "Plots/TableS3.csv")
 
 # Perform automated backward selection
 best_model <- step(glm_model, direction = "backward")
 
 #View the summary of the best model
 summary(best_model)
+TableS4<- tidy(best_model, exponentiate = TRUE)
+write.csv(TableS4, "Plots/TableS4.csv")
 
 ## plot effect sizes 
-coef_summary <- summary(best_model)$coefficients
-conf_int <- confint(best_model)
-
-# Create a data frame for plotting
-effects_df <- data.frame(
-  Predictor = rownames(coef_summary),
-  Estimate = coef_summary[, "Estimate"],
-  CI_low = conf_int[, 1],
-  CI_high = conf_int[, 2]
-)
-effects_df <- effects_df %>%
-  mutate(
-    Estimate = sign(Estimate) * sqrt(abs(Estimate)),
-    CI_low = sign(CI_low) *sqrt(abs(CI_low)),
-    CI_high = sign(CI_high) *sqrt(abs(CI_high))
-  )
-
-# remove the intercept to focus only on predictors
-effects_df <- effects_df[effects_df$Predictor != "(Intercept)", ]
-
+coef_df <- tidy(
+  best_model,
+  conf.int = TRUE,
+  exponentiate = TRUE
+) %>%
+  filter(term != "(Intercept)")
 
 # Plot
-effect_plot<- ggplot(effects_df, aes(x = reorder(Predictor, Estimate), y = Estimate)) +
-  geom_point() +
-  geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2) +
-  coord_flip() +
-  theme_minimal() +
+
+effect_plot<-ggplot(coef_df, aes(x = estimate, y = reorder(term, estimate))) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
+  geom_point(size = 3) +
+  geom_errorbarh(
+    aes(xmin = conf.low, xmax = conf.high),
+    height = 0.2
+  ) +
+  scale_x_log10() +
   labs(
-    title = "Effect Sizes from GLM",
-    x = "Predictor",
-    y = "Coefficient Estimate ± 95% CI (sqrt) "
-  )+
-  theme(text=element_text(size=16))
-tidy(best_model, exponentiate = TRUE)
+    x = "Multiplicative effect on percC (log scale)",
+    y = NULL,
+    title = "Effect sizes from Gamma(log) model",
+    subtitle = "Points show exp(coef); bars are 95% confidence intervals"
+  ) +
+  theme_minimal(base_size = 24)
 
 
-ggsave("Plots/effect_sizes.png", plot = effect_plot, width = 20, height = 18, dpi = 300)
+ggsave("Plots/effect_sizes.png", plot = effect_plot, width = 15, height = 10, dpi = 300)
 
 #####  further investigation
 
-simple_glm <- glm(wmean_percC_5~ wmean_min_distance_4+ wmean_isd_3 +wmean_LAD_3 +wmean_zskew_3 ,data = df_means, family = Gamma(link="identity"))
-=======
-simple_glm1 <- glm(wmean_percC_5~ wmean_min_distance_4*wmean_LAD_3 +wmean_isd_3 +wmean_zskew_3 ,data = df_means, family = Gamma(link="identity"))
->>>>>>> main
-simple_glm2 <- glm(wmean_percC_5~ wmean_min_distance_4*wmean_isd_3 *wmean_LAD_3 *wmean_zskew_3 ,data = df_means, family = Gamma(link="identity"))
-anova(simple_glm1, simple_glm2, test = "Chisq")
-summary(simple_glm1)
-summary(simple_glm2)
-<<<<<<< HEAD
-
-=======
-tidy(simple_glm1, exponentiate = TRUE)
->>>>>>> main
-tidy(simple_glm2, exponentiate = TRUE)
-check_model(simple_glm1)
-check_model(simple_glm2)
-
-p1<-ggplot(df_means)+
-  aes(x= wmean_min_distance_4, y= wmean_percC_5)+
-  geom_point(alpha= 0.3)+
-  geom_smooth(method= "glm", method.args = list(family=Gamma(link="identity")))+
-  theme_beautiful()
-p2<-ggplot(df_means)+
-  aes(x= wmean_isd_3, y= wmean_percC_5)+
-  geom_point(alpha= 0.3)+
-  geom_smooth(method= "glm", method.args = list(family=Gamma(link="identity")))+
-  theme_beautiful()
-p3<-ggplot(df_means)+
-  aes(x=  wmean_LAD_3, y= wmean_percC_5)+
-  geom_point(alpha= 0.3)+
-  geom_smooth(method= "glm", method.args = list(family=Gamma(link="identity")))+
-  theme_beautiful()
-p4<-ggplot(df_means)+
-  aes(x=  wmean_zskew_3, y= wmean_percC_5)+
-  geom_point(alpha= 0.3)+
-  geom_smooth(method= "glm", method.args = list(family=Gamma(link="identity")))+
-  theme_beautiful()
-
-(p1+p2)/(p3 +p4)
+simple_glm <- glm(percC~ min_distance_4+ isd_3 +zkurt_3+imean_3+p1th_3+Seasonal_NDVI_Change_1   ,data = df_means, family = Gamma(link="log"))
 
 
-<<<<<<< HEAD:scripts/build_soil_glm.R
-p5<-plot(predict_response(simple_glm1, terms= "wmean_LAD_3")) +
+TableS5<-tidy(simple_glm, exponentiate = TRUE)
+write.csv(TableS5, "Plots/TableS5.csv")
+
+p5<-plot(predict_response(simple_glm, terms= "LAD_3")) +
 labs( title = "a)" , x= "Mean Leaf Area Density", y= "Mean %C")
-p6<-plot(predict_response(simple_glm1, terms= "wmean_min_distance_4")) +
+p6<-plot(predict_response(simple_glm, terms= "min_distance_4")) +
   labs( title = "b)" , x= "Minimum Distance from Forest Edge (m)", y= "Mean %C")
-p7<-plot(predict_response(simple_glm1, terms= "wmean_isd_3")) +
+p7<-plot(predict_response(simple_glm, terms= "isd_3")) +
   labs( title = "c)" , x= "Standard Deviation of Intensity", y= "Mean %C")
-p8<-plot(predict_response(simple_glm1, terms= "wmean_zskew_3")) +
+p8<-plot(predict_response(simple_glm1, terms= "zskew_3")) +
   labs( title = "d)" , x= "Skew of Canopy Height", y= "Mean %C")
 p<- p5+p6 +p7 +p8
-=======
-p5<-plot(predict_response(simple_glm, terms= "wmean_LAD_3")) +
-labs( title = "a)" , x= "Mean Leaf Area Density", y= "Mean %C")
-p6<-plot(predict_response(simple_glm, terms= "wmean_min_distance_4")) +
-  labs( title = "b)", x= "Minimum Distance from Forest Edge (m)", y= "Mean %C")
-p7<-plot(predict_response(simple_glm, terms= "wmean_isd_3")) +
-  labs( title = "c)" , x= "Standard Deviation of Intensity", y= "Mean %C")
-p8<-plot(predict_response(simple_glm, terms= "wmean_zskew_3")) +
-  labs( title = "d)" , x= "Skew of Canopy Height", y= "Mean %C")
-p5+p6 +p7 +p8
->>>>>>> 616f9ff27b38f2573861a42373e20fbfa066ae38:scripts/v2_soil_glm.R
 
 ggsave('plots/model_inference_gradients.png', p, width = 20, height = 18, dpi = 300)
-### messing around with plotting
-install.packages("jtools")
-library(jtools)
-lm3<-best_model
-plot_summs(lm3, scale = TRUE, size=3)
 
-
-plot_summs(lm3, scale = TRUE, plot.distributions = TRUE, 
-           inner_ci_level = .9,
-           color.class = "darkgreen")

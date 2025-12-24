@@ -1,0 +1,13 @@
+"","task_id","Data Categories","regr.rmse","regr.mse","rRMSE"
+"1","sim_4","Direct Nitrogen Measurement",0.489734111465454,0.246054027292618,0.311426321999693
+"2","sim_7","Non_canopy Structure, Spaceborne Lidar, Hemispherical Photography, Direct Nitrogen Measurement",0.489909835425785,0.251844996087789,0.311538066445039
+"3","sim_5","Hemispherical Photography, Direct Nitrogen Measurement",0.511388095397184,0.265261539836976,0.325196284954325
+"4","sim_8","Airborne Lidar, Hemispherical Photography, Direct Nitrogen Measurement",0.516642530334518,0.279290045608117,0.32853762734484
+"5","sim_6","Non_canopy Structure, Direct Nitrogen Measurement",0.531637768478476,0.301107811245252,0.338073234020692
+"6","sim_9","Non_canopy Structure, Spaceborne Lidar, Hemispherical Photography, Direct Nitrogen Measurement, Airborne Lidar",0.578877835556044,0.354416335107294,0.368113617152189
+"7","sim_12","Non_canopy Structure, Airborne Lidar",0.755798481045897,0.635298102799437,0.480619045344326
+"8","sim_2","Non_canopy Structure, Spaceborne Lidar",0.784546676730358,0.626518866260028,0.498900281297747
+"9","sim_10","Non_canopy Structure, Spaceborne Lidar, Hemispherical Photography, Airborne Lidar",0.800890681589067,0.657775296866904,0.509293580846888
+"10","sim_3","Airborne Lidar",0.805846454732985,0.661444077071818,0.512445001519336
+"11","sim_11","Non_canopy Structure, Spaceborne Lidar, Airborne Lidar",0.841935511310691,0.710422972322939,0.535394356876271
+"12","sim_1","Non_canopy Structure",0.990685654800172,1.01677776130017,0.629985909719581
