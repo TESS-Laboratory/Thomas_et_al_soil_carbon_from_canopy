@@ -45,20 +45,42 @@ library(mlr3tuningspaces)
 fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
 
 #### read in data ####
-metrics<- rast(file.path(fp, "combined_metrics_raster.tif"))
-#update(x, names=TRUE)
+l_metrics<- rast(file.path(fp, "combined_metrics_raster.tif"))
+
 samples<- read_csv(file.path(fp, "soil_meta_table.csv"))
 GEDI<- read_csv(file.path(fp, "Gedi_2b_dataframe.csv"))
 colnames(GEDI) <- paste0(colnames(GEDI), "_2")
 GEDI<-rename(GEDI, Codigo = Codigo_2)
 
-l_metrics<- metrics
+## summarise soil samples 
+
+filter_values <- c("0-5","5-10","10-20","20-30")
+filtered_data <- samples |>
+  dplyr::mutate(`Profundidade (cm)_5` = as.character(`Profundidade (cm)_5`))|>
+  dplyr::filter( `Profundidade (cm)_5` %in% filter_values)
+## add weights for means
+weight_table <- filtered_data %>%
+  dplyr::mutate(weight = dplyr::case_when(
+    `Profundidade (cm)_5` == "0-5" ~ 1,
+    `Profundidade (cm)_5` =="5-10" ~ 1,
+    `Profundidade (cm)_5` == "10-20" ~ 2,
+    `Profundidade (cm)_5` == "20-30" ~2
+  ))
+
+# Summarize the data by unique IDs with a weighted mean of SOC
+summary_samples <- weight_table %>%
+  dplyr::group_by(id_clean_5) %>%
+  dplyr::summarise(across(everything(), first),
+                   across(where(is.numeric), ~ weighted.mean(.x, weight))
+                   )|>
+  select(-c(`Profundidade (cm)_5`, "id_clean_5", ...1, Local_5, notes_5, `Identifier 1_5`, massa_5, Ponto_5))
+
 
 # Convert coordinate table to a SpatVector for extraction
-coordinates <- vect(samples[, c("plot.x", "plot.y", "Codigo")], geom = c("plot.x", "plot.y"), crs = "EPSG:4326")
+coordinates <- vect(summary_samples[, c("plot.x_4", "plot.y_4", "Codigo_5")], geom = c("plot.x_4", "plot.y_4"), crs = "EPSG:4326")
 
 #align coordinates to rasters
-proj<- crs(metrics)
+proj<- crs(l_metrics)
 coordinates <- project(coordinates, proj, partial = TRUE)
 
 # Extract values across all layers in the raster stack
@@ -69,8 +91,8 @@ spatial_df <- st_as_sf(extracted_values)
 
 # Bind the columns from the original samples table to the spatial data frame
 merged_spatial_df <- spatial_df %>%
-  left_join(samples, by = "Codigo")%>%
-  left_join(GEDI, by = "Codigo")
+  left_join(summary_samples, by = "Codigo_5")%>%
+  left_join(GEDI, by = c("Codigo_5" = "Codigo"))
 
 # clean table headers
 clean_headers <- function(df) {
@@ -84,9 +106,19 @@ clean_headers <- function(df) {
 }
 
 # Apply the function to the sample data frame
-samples_metrics <- clean_headers(merged_spatial_df)%>%
-  select(-...1, -Local, -notes, -"Identifier1", -massa, -Ponto, -...15)
+samples_metrics <- clean_headers(merged_spatial_df)
 samples_metrics <- samples_metrics %>%
   rename_with(~ ifelse(grepl("^\\d", .), paste0("x", .), .))
 
-st_write(samples_metrics, file.path(fp, "soil_samples_w_complete_metrics_2.fgb"), delete_dsn= TRUE)
+train_data_clean<- dplyr::select(samples_metrics, -c("rv_2","shot_number_2","plot.x_4", 
+                                                     "plot.y_4",  "scale_1" ,
+                                                     ,"date_time_2" ,"light.conditions_4","n_3",
+                                                     "GEDI.footprints_4" ,"CperN_5","x13C_5",
+                                                     "min_distance_4","Codigo_5", "Age.category_4" ,
+                                                     "Age_4", "Age_rectified_4" ,"State_4" ,"Degradation_4"))|>
+  dplyr::rename(min_distance_4 = min_distance_1)|>
+  filter(st_geometry_type(geometry) == "POINT")
+
+
+
+write_rds(train_data_clean, file.path(fp, "soil_samples_w_complete_metrics.rds"))

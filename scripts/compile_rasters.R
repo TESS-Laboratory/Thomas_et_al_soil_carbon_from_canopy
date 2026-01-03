@@ -14,7 +14,6 @@ fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_d
 #### read in data ####
 vrt.folder <- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Large_Data/RC" ##replace with location of vrt files computed by lidar_analysis.R
 tif.folder <- file.path(fp, "SoilGrids") ## Replace with the location of Tiff files (soil grids, rivers, ect)
-output<- file.path(fp, "Outputs") ## replace with desired location of output files
 
 
 ##add in function to read in lidar raster stack
@@ -62,11 +61,11 @@ SG_files <- list.files(path = tif.folder, pattern = "\\.tif$", full.names = TRUE
 
 SG_first<- rast(SG_files[2])
 SG_list <- lapply(SG_files, rast)
-names(SG_list[[11]])<- paste0("year_of_last_fire")
+names(SG_list[[4]])<- paste0("min_distance")
+names(SG_list[[17]])<- paste0("year_of_last_fire")
 SG_aligned <- lapply(SG_list, terra::resample, y= SG_first, method = "bilinear")
 SG<- rast(SG_aligned)
 names(SG) <- paste0(names(SG), "_1")
-
 
 
 

@@ -7,8 +7,6 @@ install.packages("broom")
 install.packages("ggeffects")
 install.packages("sjPlot")
 install.packages("vegan")
-install.packages("gtsummary")
-library(gtsummary)
 library(performance)
 library(sf)
 library(dplyr)
@@ -31,52 +29,11 @@ set.seed(42)
 #local
 fp<-"C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
 #### load data
-samples_metrics<- read_sf(file.path(fp, "soil_samples_w_complete_metrics_2.fgb"))
-samples_metrics <- samples_metrics|>
-  rename_with(~ sub("^wmean_", "", .x))
-train_data_clean<- dplyr::select(samples_metrics, -c("acd_lidar_1", "rv_2","shot_number_2","plot.x", 
-                                                     "plot.y",  "scale_1" ,
-                                              ,"date_time_2" ,"light.conditions","n_3","GEDI.footprints" ,"CperN","x13C","lyr.1_1","Codigo", "Age.category" ,"Age", "Age_rectified" ,"State" ,"Degradation"))  
+samples_metrics<- read_rds(file.path(fp, "soil_samples_w_complete_metrics.rds"))
 
+train_data<- samples_metrics|>
+  dplyr::rename(percC = percC_5)
 
-train_data<- train_data_clean|>
-  dplyr::rename(effective.LAI_4 = effective.LAI,
-                actual.LAI_4 = actual.LAI,
-                clumping.index_4 = clumping.index,
-                LXG1_4 = LXG1,
-                LXG2_4 = LXG2,
-                MTA_4 = MTA,
-                canopy.openness_4 = canopy.openness,
-                min_distance_4= min_distance,
-                Profundidade_cm_5 =  Profundidade_cm_,
-                x15N_5 = x15N,
-                percN_5 = percN)
-
-
-filter_values <- c("0-5","5-10","10-20","20-30")
-filtered_data <- train_data |>
-  dplyr::mutate(Profundidade_cm_5 = as.character(Profundidade_cm_5))|>
-  dplyr::filter( Profundidade_cm_5 %in% filter_values)
-## add weights for means
-weight_table <- filtered_data %>%
-  dplyr::mutate(weight = dplyr::case_when(
-    Profundidade_cm_5== "0-5" ~ 1,
-    Profundidade_cm_5 =="5-10" ~ 1,
-    Profundidade_cm_5 == "10-20" ~ 2,
-    Profundidade_cm_5 == "20-30" ~2
-  ))
-
-# Summarize the data by unique IDs with a weighted mean of SOC
-summary_data <- weight_table %>%
-  dplyr::group_by(id_clean) %>%
-  dplyr::summarise( percC= sum(percC * weight) / sum(weight),
-                    across(
-                      .cols = -c(percC, weight, geometry),
-                      .fns  = first
-                    ),
-                    .groups = "drop"
-  )|>
-  select(-c("Profundidade_cm_5", "id_clean"))
 
 
 convert_to_numeric_or_factor <- function(df) {
@@ -91,17 +48,16 @@ convert_to_numeric_or_factor <- function(df) {
     }))
 }
 
-converted_data <- convert_to_numeric_or_factor(summary_data)
-
-##make sure headers work in mlr3 ecosystem
-colnames(converted_data)<-make.names(colnames(converted_data))
+converted_data <- convert_to_numeric_or_factor(samples_metrics)
 
 
 
 #### format table for glm ##### 
 df <- converted_data%>%
   st_drop_geometry()%>%
-  select(-"percN_5", -"x15N_5", -"fhd_normal_2", -"pground_3")
+  select(-"percN_5", -"x15N_5", -"fhd_normal_2", -"pground_3", -"...15")|>
+  select( -c('VCI_3', 'ent_3', 'zentropy_3'))# , 'GF_3', 'VCI_3'
+
 
 # weighted means of soil grids
 compute_rowwise_weighted_means <- function(df) {
@@ -121,7 +77,7 @@ compute_rowwise_weighted_means <- function(df) {
       depth_bottom = as.numeric(str_extract(depth_range, "(?<=\\.)\\d+(?=cm)")),
       depth_thickness = depth_bottom - depth_top
     )|>
-      dplyr::filter(depth_range %in% filter_values)
+    dplyr::filter(depth_range %in% filter_values)
   
   df_weighted <- df_long %>%
     group_by(row_id, value_type) %>%
@@ -149,11 +105,11 @@ compute_rowwise_weighted_means <- function(df) {
 
 df_means <- compute_rowwise_weighted_means(df)
 
-df_numeric <- df_means %>%
-  mutate(across(where(~ !is.numeric(.)), ~ as.numeric(as.factor(.)))) %>%  # Convert non-numeric to numeric factors
-  select(where(is.numeric)) %>%                                            # Select all numeric columns
-  select(where(~ sd(., na.rm = TRUE) != 0))|>
-  select(-matches("^zq|cover_z|pai_z|pavd_z"))|>
+df_numeric <- df_means |>
+  mutate(across(where(~!is.numeric(.)), ~ as.numeric(as.factor(.x))))|>  # Convert non-numeric to numeric factors
+  select(where(is.numeric))|>                                           # Select all numeric columns
+  select(where(~ sd(.x, na.rm = TRUE) != 0))|>
+  select(-matches("^zq|cover_z|pai_z|pavd_z|zpcum"))|>
   drop_na()
 
 
@@ -224,7 +180,7 @@ ggsave("Plots/PCA_full_plot.png", plot = full_plot, width = 20, height = 18, dpi
 CS_plot<- bi_plot_func(CSrda_scores)
 ggsave("Plots/PCA_CS_plot.png", plot = CS_plot, width = 20, height = 18, dpi = 300)
 
-### chatGPT script for using PCA to remove vars with high collinearity
+### PCA to reduce predictors
 
 
 # Get loadings (rotation matrix: variables x components)
@@ -256,12 +212,12 @@ for (i in 1:ncol(loadings)) {
     # Stop once we have 20 unique variables
     if (length(selected_vars) >= 20) break
   }}
-df_selected <- df_numeric[, selected_vars]
+#df_selected <- df_numeric[, selected_vars]
 df_selected <- as.data.frame(st_drop_geometry(df_means))[, selected_vars]
 
 fixed_vars<- colnames(df_selected)
 #create a formula for chosen variables
-formula_str <- paste("percC ~", paste(fixed_vars, collapse = " + "))
+formula_str <- paste("percC_5 ~", paste(fixed_vars, collapse = " + "))
 glm_formula <- as.formula(formula_str)
 
 ##compare performance of different family and links
@@ -291,6 +247,7 @@ best_model <- step(glm_model, direction = "backward")
 
 #View the summary of the best model
 summary(best_model)
+check_model(best_model)
 TableS4<- tidy(best_model, exponentiate = TRUE)
 write.csv(TableS4, "Plots/TableS4.csv")
 
@@ -323,10 +280,40 @@ effect_plot<-ggplot(coef_df, aes(x = estimate, y = reorder(term, estimate))) +
 
 ggsave("Plots/effect_sizes.png", plot = effect_plot, width = 15, height = 10, dpi = 300)
 
-#####  further investigation
+#####  further investigation (should be done manually)
 
-simple_glm <- glm(percC~ min_distance_4+ isd_3 +zkurt_3+imean_3+p1th_3+Seasonal_NDVI_Change_1   ,data = df_means, family = Gamma(link="log"))
+##remove predictors with high colinearity and soilGrids 
+simple_glm <-glm(formula = percC ~  min_distance_4 + year_of_last_fire_1+ wmean_soc_1 + LAD_3 + isd_3 + Seasonal_NDVI_Change_1 + zkurt_3, 
+                 family = Gamma(link = "log"), data = df_means)
+check_model(simple_glm)
 
+coef_df <- tidy(
+  simple_glm,
+  conf.int = TRUE,
+  exponentiate = TRUE
+) %>%
+  filter(term != "(Intercept)")
+
+# Plot
+
+effect_plot<-ggplot(coef_df, aes(x = estimate, y = reorder(term, estimate))) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
+  geom_point(size = 3) +
+  geom_errorbarh(
+    aes(xmin = conf.low, xmax = conf.high),
+    height = 0.2
+  ) +
+  scale_x_log10() +
+  labs(
+    x = "Multiplicative effect on percC (log scale)",
+    y = NULL,
+    title = "Effect sizes from Gamma(log) model",
+    subtitle = "Points show exp(coef); bars are 95% confidence intervals"
+  ) +
+  theme_minimal(base_size = 24)
+
+
+ggsave("Plots/effect_sizes_simple.png", plot = effect_plot, width = 15, height = 10, dpi = 300)
 
 TableS5<-tidy(simple_glm, exponentiate = TRUE)
 write.csv(TableS5, "Plots/TableS5.csv")
@@ -337,9 +324,9 @@ p6<-plot(predict_response(simple_glm, terms= "min_distance_4")) +
   labs( title = "b)" , x= "Minimum Distance from Forest Edge (m)", y= "Mean %C")
 p7<-plot(predict_response(simple_glm, terms= "isd_3")) +
   labs( title = "c)" , x= "Standard Deviation of Intensity", y= "Mean %C")
-p8<-plot(predict_response(simple_glm1, terms= "zskew_3")) +
-  labs( title = "d)" , x= "Skew of Canopy Height", y= "Mean %C")
+p8<-plot(predict_response(simple_glm, terms= "zkurt_3")) +
+  labs( title = "d)" , x= "Kurtosis of Canopy Height Distribution", y= "Mean %C")
 p<- p5+p6 +p7 +p8
 
-ggsave('plots/model_inference_gradients.png', p, width = 20, height = 18, dpi = 300)
+ggsave('plots/marginal_effects.png', p, width = 20, height = 18, dpi = 300)
 

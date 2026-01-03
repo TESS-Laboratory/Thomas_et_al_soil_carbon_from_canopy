@@ -9,17 +9,21 @@ library(broom)
 
 ##### read in data #####
 fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
-soil_samples <- read_csv(file.path(fp, "Soil/Jess_Plinio_soil_samples.csv"), 
+soil_samples <- read_csv(file.path(fp, "Jess_Plinio_soil_samples.csv"), 
                                      col_types = cols(massa = col_number(), 
-                                                      `15N` = col_number(), `%N` = col_number(), 
-                                                      `13C` = col_number(), `%C` = col_number(), 
-                                                      `C/N` = col_number(), ...13 = col_skip(), 
-                                                                                                                      ...14 = col_skip(), ...15 = col_skip(), 
-                                                                                                                      ...16 = col_skip()))
+                                                      `15N` = col_number(),
+                                                      `%N` = col_number(), 
+                                                      `13C` = col_number(),
+                                                      `%C` = col_number(), 
+                                                      `C/N` = col_number(), 
+                                                      ...13 = col_skip(), 
+                                                      ...14 = col_skip(),
+                                                      ...15 = col_skip(), 
+                                                      ...16 = col_skip()))
 #View(soil_samples)
 
 
-LAI_table <- read_csv("LAI_w_meta_data.csv", 
+LAI_table <- read_csv(file.path(fp, "LAI_w_meta_data.csv"), 
                       col_types = cols(ID = col_character()))
 
 
@@ -36,13 +40,18 @@ soil_samples$id_clean <- clean_column(soil_samples$Ponto)
 ##clean Ids in LAI table 
 LAI_table <- LAI_table %>%
   filter(!grepl("[a-zA-Z]", ID))
+
+colnames(LAI_table) <- paste0(colnames(LAI_table), "_4")
+colnames(soil_samples) <- paste0(colnames(soil_samples), "_5")
 # Bind the tables based on the ID
 merged_table <- soil_samples%>%
-  left_join(LAI_table, by = c("id_clean" = "ID"))
+  left_join(LAI_table, by = c("id_clean_5" = "ID_4"))
 cleaned_table <- merged_table %>%
-  filter(!is.na(effective.LAI))
+  filter(!is.na(effective.LAI_4))
 
-write.csv(cleaned_table, file =file.path(fp, "soil_meta_table.csv"))
+merged_table<- merged_table|> select(-c("...1_4"))
+
+write.csv(merged_table, file =file.path(fp, "soil_meta_table.csv"))
 
 
 ##### box plots #####

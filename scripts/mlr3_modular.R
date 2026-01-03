@@ -1,71 +1,72 @@
 ## fully modular mlr3 script
 ### set up environment ####
-install.packages("mlr3")
-install.packages("mlr3spatiotempcv")
-install.packages("mlr3learners")
-install.packages("mlr3filters")
-install.packages("mlr3fselect")
-install.packages("mlr3tuning")
-install.packages("mlr3mbo")
-install.packages("data.table")
-install.packages("dplyr")
-install.packages("ggplot2")
-install.packages("patchwork")
-install.packages("genalg")
-install.packages("xgboost")
-install.packages("DiceKriging")
-install.packages("rgenoud")
-install.packages("ranger")
-install.packages("mlr3pipelines")
-install.packages("paradox")
-install.packages("scales")
-install.packages("progressr")
-install.packages("mlr3verse")
-install.packages("mlr3tuningspaces")
-install.packages("FSelectorRcpp")
-install.packages("remotes")
-remotes::install_github("mlr-org/mlr3extralearners@*release")
-install.packages("glmnet")
-install.packages("kknn")
+#install.packages("mlr3")
+#install.packages("mlr3spatiotempcv")
+#install.packages("mlr3learners")
+#install.packages("mlr3filters")
+#install.packages("mlr3fselect")
+#install.packages("mlr3tuning")
+#install.packages("mlr3mbo")
+#install.packages("data.table")
+#install.packages("dplyr")
+#install.packages("ggplot2")
+#install.packages("patchwork")
+#install.packages("genalg")
+#install.packages("xgboost")
+#install.packages("DiceKriging")
+#install.packages("rgenoud")
+#install.packages("ranger")
+#install.packages("mlr3pipelines")
+#install.packages("paradox")
+#install.packages("scales")
+#install.packages("progressr")
+#install.packages("mlr3verse")
+#install.packages("mlr3tuningspaces")
+#install.packages("FSelectorRcpp")
+#install.packages("remotes")
+#remotes::install_github("mlr-org/mlr3extralearners@*release")
+#install.packages("glmnet")
+#install.packages("kknn")
+#install.packages("raster", repos = "https://cloud.r-project.org")
+#install.packages("tidyverse", repos = "https://cloud.r-project.org")
 
-
-library(glmnet)
-library(kknn)
-library(mlr3extralearners)
-library(FSelectorRcpp)
+#library(glmnet)
+#library(kknn)
+library(mlr3extralearners)#used
+#library(FSelectorRcpp)
 library(mlr3tuningspaces)
-library(mlr3verse)
+library(mlr3verse)# used
 library(progressr)
-library(scales)
-library(paradox)
+#library(scales)
+#library(paradox)
 library(mlr3pipelines)
 library(ranger)
-library(rgenoud)
-library(DiceKriging)
-library(xgboost)
-library(genalg)
+#library(rgenoud)
+#library(DiceKriging)
+#library(xgboost)
+#library(genalg)
 library(mlr3)
 library(mlr3spatiotempcv)
 library(mlr3learners)
 library(mlr3filters)
 library(mlr3fselect)
 library(mlr3tuning)
-library(mlr3mbo)
-library(data.table)
-library(dplyr)
-library(tidyr)
+#library(mlr3mbo)
+#library(data.table)
+library(tidyr)#used
 library(ggplot2)
-library(sf)
-library(patchwork)  # For arranging plots
+library(sf)#used
+library(patchwork)
 library(future)
-
-fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data"
-future::plan("cluster", workers = 30)
+library(dplyr)#used
+fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data" ##local
+#fp<- "Plots" ##workstation
+#future::plan("cluster", workers = 30)
 
 ## R code for creating a bespoke theme in ggplot that makes it much easier to produce beautiful publication-quality plots.
 #### Create Plotting theme ####
 theme_beautiful <- function() {
-  theme_bw() +
+  theme_bw(base_size = 13) +
     theme(
       text = element_text(family = "Helvetica"),
       axis.text = element_text(size = 8, color = "black"),
@@ -105,14 +106,21 @@ mlr_measures$get("regr.smape")
 ### read in data and set parameters ####
 
 #dataset
-samples_metrics<- read_sf(file.path(fp, "soil_samples_w_complete_metrics.csv"))
+#samples_metrics<- read_sf(file.path(fp, "soil_samples_w_complete_metrics.fgb")) ##local
+samples_metrics<-read_rds(file.path(fp,"soil_samples_w_complete_metrics.rds"))
 #train_data_rm<- select(train_data, where(~!any(is.na(.))))
-train_data_clean<- select(samples_metrics, -"wmean_acd_lidar_3", -"wmean_GF_3")%>%
-  drop_na()
+#train_data_clean<- dplyr::select(samples_metrics, -c("x13C_5", "CperN_5"))# , 'GF_3', 'VCI_3'
 
+
+train_data<- samples_metrics|>
+  dplyr::rename(percC = percC_5)
+
+##make sure headers work in mlr3 ecosystem
+#converted_data<- non_sf
+colnames(train_data)<-make.names(colnames(train_data))
 convert_to_numeric_or_factor <- function(df) {
   df %>%
-    mutate(across(where(~ !inherits(., "sfc")), ~ {  # Ignore geometry columns
+    dplyr::mutate(across(where(~ !inherits(., "sfc")), ~ {  # Ignore geometry columns
       num_col <- suppressWarnings(as.numeric(.))
       if (all(is.na(.) | !is.na(num_col))) {
         num_col
@@ -122,11 +130,8 @@ convert_to_numeric_or_factor <- function(df) {
     }))
 }
 
-converted_data <- convert_to_numeric_or_factor(train_data_clean)
-
-##make sure headers work in mlr3 ecosystem
-#converted_data<- non_sf
-colnames(converted_data)<-make.names(colnames(converted_data))
+converted_data <- convert_to_numeric_or_factor(train_data)
+#prep data 
 
 # Define Simulation Configurations
 simulations <- list(
@@ -147,7 +152,7 @@ simulations <- list(
 # Define learners and search space Configurations
 students <- list(
   list(learner = lrn("regr.ranger", importance = "impurity", num.trees = to_tune(200, 1000)), SS = lts("regr.ranger.default")),#
-  list(learner = lrn("regr.glm"), SS=NULL),
+  list(learner = as_learner(po("imputemean") %>>% lrn("regr.glm")), SS=NULL),
   #list(learner = lrn("regr.kknn"), SS = "regr.kknn.default"),
   list(learner = lrn("regr.rpart", cp = to_tune(1e-04,   0.1)), SS = lts("regr.rpart.default"))
   #list(learner = lrn("regr.svm"), SS = "regr.svm.default")
@@ -161,11 +166,11 @@ set_up_tasks <- function(train_data, feature_suffixes, sim_id) {
   message(paste0("Running Simulation ", sim_id, " with features: ", paste(feature_suffixes, collapse = ", ")))
   
   # Extract Selected Features
-  train_data_filtered <- train_data %>% select("wmean_percC_5", ends_with(feature_suffixes))
+  train_data_filtered <- train_data %>% select("percC", ends_with(feature_suffixes))
   
   
   # Convert to Regression Task (for Spatial Data)
-  task <- as_task_regr_st(train_data_filtered, target = "wmean_percC_5", id = paste0("sim_", sim_id))
+  task <- as_task_regr_st(train_data_filtered, target = "percC", id = paste0("sim_", sim_id))
   poe = po("encode")
   encoded_tsk = poe$train(list(task))[[1]]
   
@@ -187,8 +192,8 @@ set_up_at_learners <- function(lrnr, SS) {
       resampling = rsmp("spcv_coords", folds = 3),
       measure = msr("regr.smape"),
       #search_space = SS,
-      term_evals = 100, ## still might not be enough! 
-      terminator = trm("evals", n_evals = 100)
+      term_evals = 200, ## 100 still might not be enough! 500 too many
+      terminator = trm("evals", n_evals = 200)
     )
   }
   
@@ -197,8 +202,8 @@ set_up_at_learners <- function(lrnr, SS) {
     learner = at,
     resampling = rsmp("spcv_coords", folds = 3),
     measure = msr("regr.smape"),
-    term_evals = 100,
-    terminator = trm("evals", n_evals = 100)
+    term_evals =200,
+    terminator = trm("evals", n_evals = 200)
   )
   
   return(afs)  
@@ -226,10 +231,10 @@ x <- bmr$aggregate(measures = c(msr("regr.rmse"), msr("regr.mse"))) %>%
   filter(regr.rmse == min(regr.rmse, na.rm = TRUE)) %>%
   ungroup()
 
-m_obs<- mean(converted_data$wmean_percC_5)
+m_obs<- mean(converted_data$percC)
 x$rRMSE<- x$regr.rmse/m_obs
 xforexport<- x%>% select(-"resample_result")
-write.csv(xforexport, file.path(fp, "sims_w_measures_2.csv"), row.names = FALSE)
+write.csv(xforexport, file.path(fp, "sims_w_measures.csv"), row.names = FALSE)
 x <- x %>%
   arrange(regr.rmse) %>%
   mutate(task_id = factor(task_id, levels = rev(task_id)))  # reversed for top-down
@@ -255,7 +260,7 @@ p<-ggplot(df_long, aes(x = task_id, y = value, fill = metric)) +
     legend.title = element_blank()
   )
 p
-ggsave("Plots/barchart_of_sim_performance_2.png", plot = p, width = 12, height = 8, dpi = 300)
+ggsave("Plots/barchart_of_sim_performance.png", plot = p, width = 12, height = 8, dpi = 300)
 ### resample best learners ####
 ##bmr$score()$learner[[2]]$importance()
 
@@ -299,10 +304,10 @@ df <- df[order(-df$adjusted_count), ]
 # Print the sorted table
 print(df)
 ### plots and analysis ####
-write.csv(df, file.path(fp, "variable_presence_count_2.csv"), row.names = FALSE)
+write.csv(df, file.path(fp, "variable_presence_count.csv"), row.names = FALSE)
 
 #autoplot(bmr$score(predictions = TRUE)$prediction_test[[x]])
-## grid plot of truth vs response with point densoity hexagons
+## grid plot of truth vs response with point density hexagons
 
 density_breaks <- c(1, 20, 40, 60, 80, 100)
 plot_sims<- function (x, xy_lim= 8) {
@@ -346,7 +351,7 @@ plot_list <- lapply(y, plot_sims)
 final_grid_plot <- wrap_plots(plot_list, ncol = 3, nrow = 4)
 #save
 
-ggsave("Plots/grid_of_truth_vs_response_2.png", plot = final_grid_plot, width = 20, height = 18, dpi = 300)
+ggsave("Plots/grid_of_truth_vs_response.png", plot = final_grid_plot, width = 20, height = 18, dpi = 300)
 
 ### importance scores for variables in each simulation
 feature_importance<- function (x, xy_lim= 8) {
@@ -386,6 +391,55 @@ feature_importance<- function (x, xy_lim= 8) {
     theme_beautiful()
   return(p)
 }
-plot_list <- lapply(v, feature_importance)
+
+v<- x|>
+  filter(!learner_id == "regr.glm.fselector")
+
+plot_list <- lapply(v$nr, feature_importance)
 importance_grid_plot <- wrap_plots(plot_list, ncol = 3, nrow = 4)
-ggsave("Plots/grid_of_importance_scores_2.png", plot = importance_grid_plot, width = 20, height = 18, dpi = 300)
+ggsave("Plots/grid_of_importance_scores.png", plot = importance_grid_plot, width = 20, height = 18, dpi = 300)
+
+bmr$aggregate()
+
+TableS1<- as_tibble(bmr$aggregate())|>
+  select(c(task_id, learner_id, regr.mse))
+write.csv(TableS1, "Plots/TableS1.csv")
+
+library(stringr)
+library(purrr)
+
+df<-x|> 
+  select(c(task_id, regr.rmse, regr.mse, rRMSE))
+
+
+
+df <- df %>%
+  dplyr::mutate(
+    # extract first number from y
+    y_index <- as.integer(gsub(".*?(\\d+).*", "\\1", df$task_id)),
+    
+    # look up feature_suffixes safely
+    feature_suffixes = map_chr(
+      y_index,
+      ~ {
+        if (is.na(.x) || .x > length(simulations)) return(NA_character_)
+        
+        fs <- simulations[[.x]]$feature_suffixes
+        
+        if (is.null(fs)) return(NA_character_)
+        
+        paste(fs, collapse = ", ")
+      }
+    )
+  )
+df$feature_suffixes <- gsub("_1", "Non_canopy Structure", df$feature_suffixes)
+df$feature_suffixes <- gsub("_2", "Spaceborne Lidar", df$feature_suffixes)
+df$feature_suffixes <- gsub("_3", "Airborne Lidar", df$feature_suffixes)
+df$feature_suffixes <- gsub("_4", "Hemispherical Photography", df$feature_suffixes)
+df$feature_suffixes <- gsub("_5", "Direct Nitrogen Measurement", df$feature_suffixes)
+
+TableS2<- df|> 
+  select(c(task_id,feature_suffixes, regr.rmse, regr.mse, rRMSE))|>
+  rename("Data Categories" = feature_suffixes)
+
+write.csv(TableS2, "Plots/TableS2.csv")
