@@ -283,7 +283,8 @@ ggsave("Plots/effect_sizes.png", plot = effect_plot, width = 15, height = 10, dp
 #####  further investigation (should be done manually)
 
 ##remove predictors with high colinearity and soilGrids 
-simple_glm <-glm(formula = percC ~  min_distance_4 + year_of_last_fire_1+ wmean_soc_1 + LAD_3 + isd_3 + Seasonal_NDVI_Change_1 + zkurt_3, 
+simple_glm <-glm(formula = percC_5 ~ year_of_last_fire_1 + wmean_soc_1 + p1th_3 + 
+                   wmean_sand_1 + imean_3 + Seasonal_NDVI_Change_1 + zkurt_3, 
                  family = Gamma(link = "log"), data = df_means)
 check_model(simple_glm)
 
@@ -318,7 +319,7 @@ ggsave("Plots/effect_sizes_simple.png", plot = effect_plot, width = 15, height =
 TableS5<-tidy(simple_glm, exponentiate = TRUE)
 write.csv(TableS5, "Plots/TableS5.csv")
 
-p5<-plot(predict_response(simple_glm, terms= "LAD_3")) +
+p5<-plot(predict_response(simple_glm, terms= "zkurt_3")) +
 labs( title = "a)" , x= "Mean Leaf Area Density", y= "Mean %C")
 p6<-plot(predict_response(simple_glm, terms= "min_distance_4")) +
   labs( title = "b)" , x= "Minimum Distance from Forest Edge (m)", y= "Mean %C")

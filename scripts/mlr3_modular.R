@@ -30,29 +30,29 @@
 #install.packages("raster", repos = "https://cloud.r-project.org")
 #install.packages("tidyverse", repos = "https://cloud.r-project.org")
 
-#library(glmnet)
-#library(kknn)
+library(glmnet)
+library(kknn)
 library(mlr3extralearners)#used
-#library(FSelectorRcpp)
+library(FSelectorRcpp)
 library(mlr3tuningspaces)
 library(mlr3verse)# used
 library(progressr)
-#library(scales)
-#library(paradox)
+library(scales)
+library(paradox)
 library(mlr3pipelines)
 library(ranger)
-#library(rgenoud)
-#library(DiceKriging)
-#library(xgboost)
-#library(genalg)
+library(rgenoud)
+library(DiceKriging)
+library(xgboost)
+library(genalg)
 library(mlr3)
 library(mlr3spatiotempcv)
 library(mlr3learners)
 library(mlr3filters)
 library(mlr3fselect)
 library(mlr3tuning)
-#library(mlr3mbo)
-#library(data.table)
+library(mlr3mbo)
+library(data.table)
 library(tidyr)#used
 library(ggplot2)
 library(sf)#used
@@ -61,7 +61,7 @@ library(future)
 library(dplyr)#used
 fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data" ##local
 #fp<- "Plots" ##workstation
-#future::plan("cluster", workers = 30)
+future::plan("cluster", workers=future::availableCores()-2)
 
 ## R code for creating a bespoke theme in ggplot that makes it much easier to produce beautiful publication-quality plots.
 #### Create Plotting theme ####
@@ -108,11 +108,12 @@ mlr_measures$get("regr.smape")
 #dataset
 #samples_metrics<- read_sf(file.path(fp, "soil_samples_w_complete_metrics.fgb")) ##local
 samples_metrics<-read_rds(file.path(fp,"soil_samples_w_complete_metrics.rds"))
+samples_metrics<-dplyr::filter(samples_metrics, st_geometry_type(geometry) == "POINT")
 #train_data_rm<- select(train_data, where(~!any(is.na(.))))
-#train_data_clean<- dplyr::select(samples_metrics, -c("x13C_5", "CperN_5"))# , 'GF_3', 'VCI_3'
+train_data_clean<- dplyr::select(samples_metrics, -c('VCI_3', 'ent_3', 'zentropy_3'))# , 'GF_3', 'VCI_3''
 
 
-train_data<- samples_metrics|>
+train_data<- train_data_clean|>
   dplyr::rename(percC = percC_5)
 
 ##make sure headers work in mlr3 ecosystem
@@ -152,7 +153,7 @@ simulations <- list(
 # Define learners and search space Configurations
 students <- list(
   list(learner = lrn("regr.ranger", importance = "impurity", num.trees = to_tune(200, 1000)), SS = lts("regr.ranger.default")),#
-  list(learner = as_learner(po("imputemean") %>>% lrn("regr.glm")), SS=NULL),
+  list(learner = lrn("regr.glm"), SS=NULL),
   #list(learner = lrn("regr.kknn"), SS = "regr.kknn.default"),
   list(learner = lrn("regr.rpart", cp = to_tune(1e-04,   0.1)), SS = lts("regr.rpart.default"))
   #list(learner = lrn("regr.svm"), SS = "regr.svm.default")
@@ -190,7 +191,7 @@ set_up_at_learners <- function(lrnr, SS) {
       tuner = tnr("grid_search", resolution = 5, batch_size = 25),
       learner = lrnr,
       resampling = rsmp("spcv_coords", folds = 3),
-      measure = msr("regr.smape"),
+      measure = msr("regr.rmse"),
       #search_space = SS,
       term_evals = 200, ## 100 still might not be enough! 500 too many
       terminator = trm("evals", n_evals = 200)
@@ -201,7 +202,7 @@ set_up_at_learners <- function(lrnr, SS) {
     fselector = fs("genetic_search"), ##TODO try forwards selection can't use paralisation but can set up max feature number 
     learner = at,
     resampling = rsmp("spcv_coords", folds = 3),
-    measure = msr("regr.smape"),
+    measure = msr("regr.rmse"),
     term_evals =200,
     terminator = trm("evals", n_evals = 200)
   )

@@ -2,6 +2,7 @@
 #### best run on workstation ####
 
 
+
 #### set up environment ####
 #install.packages(c("rsi", "terra", "patchwork", "ggplot2", "viridis"), repos = "https://cloud.r-project.org")
 #install.packages(c("lidR", "stars", "sf"), repos = "https://cloud.r-project.org")
@@ -15,7 +16,7 @@
 #install.packages("tidyverse")
 library(lidR)
 library(geometry)
-#library(raster)
+library(raster)
 library(terra)
 library(stars)
 library(sf)
@@ -225,8 +226,11 @@ LADCV <- function(z) {
   return(r)
 }
 
-
-#trial_lad_norm <- pixel_metrics(norm, ~LADCV(Z), res = 10)
+LAD_cat<- function(las, res){
+  cat_norm <- filter_poi(las, Z > 0)
+  return(pixel_metrics(cat_norm, ~LADCV(Z), res))
+}
+#metrics <- catalog_map(norm, LAD_cat, res = 20)
 
 
 
@@ -245,35 +249,39 @@ GFCV <- function(z) {
   return(r)
 }
 
-#trial_GF <- pixel_metrics(ctg, ~GFCV(Z), res = 10)
+#trial_GF <- pixel_metrics(norm, ~GFCV(Z), res = 10)
 #terra::plot(trial_GF)
 
 Entropy <- function(las, res) { # user-defined function
-  return(pixel_metrics(las, entropy(Z), res))
+  cat_norm <- filter_poi(las, Z > 0)
+  return(pixel_metrics(cat_norm, entropy(Z), res))
 }
 
+#trial_ent_norm <- pixel_metrics(norm, ~entropy(Z), res = 10)
 ##Test##
 #ctg <- catalog_list[[2]]
 #opt_chunk_buffer(ctg) <- 10
 #opt_chunk_alignment(ctg) <- c(100, 200)
 #options <- list(raster_alignment = 20)
-#metrics <- catalog_map(ctg, Entropy, res = 20, .options = options)
+#metrics <- catalog_map(norm, Entropy, res = 20)
 #plot(metrics, col = height.colors(50))
 
 VCIfunc <- function(las, res) { # user-defined function
-  return(pixel_metrics(las, VCI(Z, zmax= max(Z)), res))
+  cat_norm <- filter_poi(las, Z > 0)
+  return(pixel_metrics(cat_norm, VCI(Z, zmax= max(Z)), res))
 }
 
 #ctg <- catalog_list[[2]]
 #opt_chunk_buffer(ctg) <- 10
 #opt_chunk_alignment(ctg) <- c(100, 200)
 #options <- list(raster_alignment = 20)
-#metrics <- catalog_map(ctg, VCIfunc, res = 20, .options = options)
-#plot(metrics, col = height.colors(50))
+#metrics <- catalog_map(norm, VCIfunc, res = 20)
+
 
 # calculate standard metrics
 stmetrics <- function(las, res) {
-  return(pixel_metrics(las, .stdmetrics, res))
+  cat_norm <- filter_poi(las, Z > 0)
+  return(pixel_metrics(cat_norm, .stdmetrics, res))
 } 
 #metrics <- catalog_map(norm, stmetrics, res = 20, .options = options)
 #plot(metrics, col = height.colors(50))
@@ -320,11 +328,11 @@ run_everything<- function(laz_ctg){
   )
   lad_vrt_check <- file.path(
     LAD_dir,
-    "pixel_metrics.vrt"
+    "FUN.vrt"
   )
   if (!file.exists(lad_vrt_check)) {
     cli::cli_alert_info("Creating LAD")
-    lad <- pixel_metrics(norm, ~LADCV(Z), res = 10)
+    lad <- catalog_map(norm, LAD_cat, res = 20, .options = options)
   } else {
     cli::cli_alert_info("LAD already exists")
     lad <- terra::rast(lad_vrt_check)
@@ -406,7 +414,7 @@ run_everything<- function(laz_ctg){
   
   comp_dir <- file.path(lid_proc_dir, paste0(mod_name, "_comp.vrt"))
   comp <- rsi::stack_rasters(list(file.path(rump_dir,"FUN.vrt"),
-                                  file.path(LAD_dir,"pixel_metrics.vrt"),
+                                  file.path(LAD_dir,"FUN.vrt"),
                                   file.path(GF_dir,"pixel_metrics.vrt"),
                                   file.path(ent_dir,"FUN.vrt"),
                                   file.path(VCI_dir,"FUN.vrt"),
@@ -437,5 +445,20 @@ stack_list<-catalog_list%>%
   map(run_everything)
 
 
+raster_list<- lapply(stack_list, vrt)
+mos<- do.call(mosaic, raster_list)
+plot(mos)
+names(mos)<- c("rump","LAD", "GF", "ent", "VCI", "zmax", 
+               "zmean","zsd","zskew","zkurt","zentropy",
+               "pzabovezmean", "pzabove2","zq5","zq10","zq15", "zq20",        
+               "zq25" ,"zq30","zq35","zq40","zq45","zq50",       
+               "zq55","zq60","zq65","zq70","zq75","zq80",        
+               "zq85","zq90","zq95","zpcum1","zpcum2","zpcum3",      
+               "zpcum4","zpcum5","zpcum6","zpcum7","zpcum8","zpcum9",      
+               "itot","imax","imean","isd","iskew","ikurt",      
+               "ipground","ipcumzq10","ipcumzq30","ipcumzq50","ipcumzq70","ipcumzq90",   
+               "p1th","p2th","p3th","p4th","p5th","pground",    
+               "n","area")
+raster::writeRaster(mos, "Data/Lidar_metrics.tif")
 
 #### debgging ####
