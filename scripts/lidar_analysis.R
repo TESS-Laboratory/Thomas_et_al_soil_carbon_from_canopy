@@ -28,7 +28,7 @@ library(rgl)
 library(purrr)
 library(rsi)
 
-future::plan(future::multisession, workers = future::availableCores()-20)
+future::plan(future::multisession, workers = future::availableCores()-2)
 
 
 ###### read in functions ######

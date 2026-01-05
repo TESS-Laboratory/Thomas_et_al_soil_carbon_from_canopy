@@ -110,10 +110,10 @@ mlr_measures$get("regr.smape")
 samples_metrics<-read_rds(file.path(fp,"soil_samples_w_complete_metrics.rds"))
 samples_metrics<-dplyr::filter(samples_metrics, st_geometry_type(geometry) == "POINT")
 #train_data_rm<- select(train_data, where(~!any(is.na(.))))
-train_data_clean<- dplyr::select(samples_metrics, -c('VCI_3', 'ent_3', 'zentropy_3'))# , 'GF_3', 'VCI_3''
+#train_data_clean<- dplyr::select(samples_metrics, -c('VCI_3', 'ent_3', 'zentropy_3'))# , 'GF_3', 'VCI_3''
 
 
-train_data<- train_data_clean|>
+train_data<- samples_metrics|>
   dplyr::rename(percC = percC_5)
 
 ##make sure headers work in mlr3 ecosystem

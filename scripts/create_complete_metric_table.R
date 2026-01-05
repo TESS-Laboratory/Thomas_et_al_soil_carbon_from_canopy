@@ -2,8 +2,6 @@
 
 #### set up environment ####
 #install.packages("performance")
-#install.packages("GGally")
-#install.packages("fastDummies")
 #install.packages("vegan")
 #install.packages("mlr3")
 #install.packages("mlr3viz")
@@ -116,7 +114,8 @@ train_data_clean<- dplyr::select(samples_metrics, -c("rv_2","shot_number_2","plo
                                                      "GEDI.footprints_4" ,"CperN_5","x13C_5",
                                                      "min_distance_4","Codigo_5", "Age.category_4" ,
                                                      "Age_4", "Age_rectified_4" ,"State_4" ,"Degradation_4"))|>
-  dplyr::rename(min_distance_4 = min_distance_1)|>
+  dplyr::rename(min_distance_4 = min_distance_1, 
+                acd_lidar_3 = acd_lidar_1)|>
   filter(st_geometry_type(geometry) == "POINT")
 
 
