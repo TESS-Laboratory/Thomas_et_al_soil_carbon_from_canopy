@@ -7,6 +7,8 @@ install.packages("broom")
 install.packages("ggeffects")
 install.packages("sjPlot")
 install.packages("vegan")
+install.packages("modelsummary")
+install.packages("pandoc")
 library(performance)
 library(sf)
 library(dplyr)
@@ -21,6 +23,55 @@ library(purrr)
 library(broom)
 library(vegan)
 library(ggeffects)
+library(modelsummary)
+
+#### Create Plotting theme ####
+theme_beautiful <- function() {
+  theme_bw(base_size = 13) +
+    theme(
+      text = element_text(family = "Helvetica"),
+      axis.text = element_text(size = 8, color = "black"),
+      axis.title = element_text(size = 8, color = "black"),
+      axis.line.x = element_line(size = 0.3, color = "black"),
+      axis.line.y = element_line(size = 0.3, color = "black"),
+      axis.ticks = element_line(size = 0.3, color = "black"),
+      panel.border = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.y = element_blank(),
+      plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), units = , "cm"),
+      plot.title = element_text(
+        size = 8,
+        vjust = 1,
+        hjust = 0.5,
+        color = "black"
+      ),
+      legend.text = element_text(size = 8, color = "black"),
+      legend.title = element_text(size = 8, color = "black"),
+      legend.position = c(0.9, 0.9),
+      legend.key.size = unit(0.9, "line"),
+      legend.background = element_rect(
+        color = "black",
+        fill = "transparent",
+        size = 2,
+        linetype = "blank"
+      )
+    )
+}
+windowsFonts("Helvetica" = windowsFont("Helvetica")) # Ensure font is mapped correctly
+
+### table set up
+set_sf<-function(x){ ifelse(
+  x > 1,
+  fmt_sprintf("%.2f")(x),
+  ifelse(abs(x) <= 1e-3,
+         formatC(x, format = "e", digits = 2),
+         ifelse(abs(x) <= 1, 
+                formatC(x, format = "fg", digits = 2),
+                formatC(x, format = "f", digits = 2))
+  ))
+}
 set.seed(42)
 
 ##set WD
@@ -202,7 +253,7 @@ for (i in 1:ncol(loadings)) {
     pull(var)
   # Find the first variable not already selected
   for (var in ranked_vars) {
-    if (var == "percC") next  # Skip this specific variable
+    if (var == "percC_5") next  # Skip this specific variable
     
     if (!(var %in% selected_vars)) {
       selected_vars <- c(selected_vars, var)
@@ -239,6 +290,36 @@ lines(resid(glm.gam.id, type='response'), col='red')
 glm_model <- glm(glm_formula, data = df_means, family = Gamma(link="log"))
 
 summary(glm_model)
+long_names<-c("LAD_3" = "Leaf Area Density (Airborne Lidar)",
+              "wmean_soc_1"  = "Soil Organic Carbon (Online)",
+              "year_of_last_fire_1" = "Year of Most Recent Fire (Online)",
+              "imean_3" = "Mean Intensity of Lidar Returns (Airborne Lidar)",
+              "p1th_3"  = "Percentage 1st Returns (Airborne Lidar)",
+              "wmean_sand_1"  =  "Sand content (Online)",
+              "isd_3" = "Standard Deviation of Lidar Return Intensity (Airborne Lidar)",
+              "secondary_vegetation_age_2023_1" = "Age of Secondary Vegetation (Online)",
+              "classification_2023_1"   = "Classification of Forest Degredation (Online)",
+              "itot_3"  = "Total Lidar Return Intensity (Airborne Lidar)",
+              "pgap_theta_2" = "Pgap(theta) of Canopy (Spaceborne Lidar)",
+              "pzabovezmean_3"  = "Percentage of Returns Above Mean Canopy Height (Airborne Lidar)",
+              "imax_3" = "Maximum Intensity of Lidar Returns (Airborne Lidar)",
+              "zkurt_3" = "Kurtosis of Canopy Height (Airborne Lidar)",
+              "ipground_3" = "Percentage of Intensity Returned by Ground (Airborne Lidar)",
+              "clumping.index_4" = "Clumping Index (Hemispherical Photography)",
+              "wmean_cec_1" = "Cation Exchange Capacity (Online)",
+              "Seasonal_NDVI_Change_1"  = "Seasonall Difference in NDVI (Online)", 
+              "canopy.openness_4" = "Canopy Openness (Hemispherical Photography)",
+              "wmean_nitrogen_1" = "Total Nitrogen (Online)")
+table_s3<-modelsummary(list("20 variable GLM Summary" = glm_model), 
+             fmt = set_sf, 
+             shape = term ~ model + statistic,
+             coef_omit = "Intercept",
+             estimate  = "{estimate}",
+             statistic = c("{std.error}", "{p.value}"),
+             gof_omit = "Num.Obs|BIC|Log.Lik.|F",
+             exponentiate = TRUE,
+             output = "Plots/Table_S3.docx"
+)
 TableS3<- tidy(glm_model, exponentiate = TRUE)
 write.csv(TableS3, "Plots/TableS3.csv")
 
@@ -248,6 +329,16 @@ best_model <- step(glm_model, direction = "backward")
 #View the summary of the best model
 summary(best_model)
 check_model(best_model)
+table_s4<-modelsummary(list("Most Parsimonious GLM Summary" = best_model), 
+                       fmt = set_sf, 
+                       shape = term ~ model + statistic,
+                       coef_omit = "Intercept",
+                       estimate  = "{estimate}",
+                       statistic = c("{std.error}", "{p.value}"),
+                       gof_omit = "Num.Obs|BIC|Log.Lik.|F",
+                       exponentiate = TRUE,
+                       output = "Plots/Table_S4.docx"
+)
 TableS4<- tidy(best_model, exponentiate = TRUE)
 write.csv(TableS4, "Plots/TableS4.csv")
 
@@ -282,9 +373,9 @@ ggsave("Plots/effect_sizes.png", plot = effect_plot, width = 15, height = 10, dp
 
 #####  further investigation (should be done manually)
 
-##remove predictors with high colinearity and soilGrids 
-simple_glm <-glm(formula = percC_5 ~ year_of_last_fire_1 + wmean_soc_1 + p1th_3 + 
-                   wmean_sand_1 + imean_3 + Seasonal_NDVI_Change_1 + zkurt_3, 
+##remove predictors with high colinearity and modelled data 
+simple_glm <-glm(formula = percC_5 ~ LAD_3 +  imean_3 + p1th_3 + 
+                    itot_3 + pzabovezmean_3 + zkurt_3, 
                  family = Gamma(link = "log"), data = df_means)
 check_model(simple_glm)
 
@@ -315,19 +406,40 @@ effect_plot<-ggplot(coef_df, aes(x = estimate, y = reorder(term, estimate))) +
 
 
 ggsave("Plots/effect_sizes_simple.png", plot = effect_plot, width = 15, height = 10, dpi = 300)
+table_s5<-modelsummary(list("Reduced GLM Summary" = simple_glm), 
+                       fmt = set_sf, 
+                       shape = term ~ model + statistic,
+                       coef_omit = "Intercept",
+                       estimate  = "{estimate}",
+                       statistic = c("{std.error}", "{p.value}"),
+                       gof_omit = "Num.Obs|BIC|Log.Lik.|F",
+                       exponentiate = TRUE,
+                       coef_rename = long_names,
+                       output = "Plots/Table_Ss.docx"
+)
 
 TableS5<-tidy(simple_glm, exponentiate = TRUE)
 write.csv(TableS5, "Plots/TableS5.csv")
 
-p5<-plot(predict_response(simple_glm, terms= "zkurt_3")) +
-labs( title = "a)" , x= "Mean Leaf Area Density", y= "Mean %C")
-p6<-plot(predict_response(simple_glm, terms= "min_distance_4")) +
-  labs( title = "b)" , x= "Minimum Distance from Forest Edge (m)", y= "Mean %C")
-p7<-plot(predict_response(simple_glm, terms= "isd_3")) +
-  labs( title = "c)" , x= "Standard Deviation of Intensity", y= "Mean %C")
+p5<-plot(predict_response(simple_glm, terms= "LAD_3")) +
+labs( title = "a)" , x= "Mean Leaf Area Density", y= "Mean %C")+
+  theme_minimal(base_size = 24)
+p6<-plot(predict_response(simple_glm, terms= "pzabovezmean_3")) +
+  labs( title = "b)" , x= "Percentage of Lidar Returns Above Mean Canopy Height", y= "Mean %C")+
+  theme_minimal(base_size = 24)
+p7<-plot(predict_response(simple_glm, terms= "imean_3")) +
+  labs( title = "c)" , x= "Mean Intensity of Lidar Returns", y= "Mean %C")+
+  theme_minimal(base_size = 24)
 p8<-plot(predict_response(simple_glm, terms= "zkurt_3")) +
-  labs( title = "d)" , x= "Kurtosis of Canopy Height Distribution", y= "Mean %C")
-p<- p5+p6 +p7 +p8
+  labs( title = "d)" , x= "Kurtosis of Canopy Height Distribution", y= "Mean %C")+
+  theme_minimal(base_size = 24)
+p9<-plot(predict_response(simple_glm, terms= "p1th_3")) +
+  labs( title = "e)" , x= "Percentage 1st Returns", y= "Mean %C")+
+  theme_minimal(base_size = 24)
+p10<-plot(predict_response(simple_glm, terms= "itot_3 ")) +
+  labs( title = "f)" , x= "Total Intensity of Lidar Returns", y= "Mean %C")+
+  theme_minimal(base_size = 24)
+p<- (p5+p6 )/(p7 +p8)/( p9+ p10)
 
 ggsave('plots/marginal_effects.png', p, width = 20, height = 18, dpi = 300)
 

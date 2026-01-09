@@ -32,6 +32,7 @@
 
 library(glmnet)
 library(kknn)
+library(readr)
 library(mlr3extralearners)#used
 library(FSelectorRcpp)
 library(mlr3tuningspaces)
@@ -61,16 +62,17 @@ library(future)
 library(dplyr)#used
 fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data" ##local
 #fp<- "Plots" ##workstation
-future::plan("cluster", workers=future::availableCores()-2)
+#future::plan("multisession", workers=future::availableCores()-2)
+
 
 ## R code for creating a bespoke theme in ggplot that makes it much easier to produce beautiful publication-quality plots.
 #### Create Plotting theme ####
 theme_beautiful <- function() {
-  theme_bw(base_size = 13) +
+  theme_bw(base_size = 20) +
     theme(
       text = element_text(family = "Helvetica"),
-      axis.text = element_text(size = 8, color = "black"),
-      axis.title = element_text(size = 8, color = "black"),
+      axis.text = element_text(size = 20, color = "black"),
+      axis.title = element_text(size = 20, color = "black"),
       axis.line.x = element_line(size = 0.3, color = "black"),
       axis.line.y = element_line(size = 0.3, color = "black"),
       axis.ticks = element_line(size = 0.3, color = "black"),
@@ -81,15 +83,15 @@ theme_beautiful <- function() {
       panel.grid.major.y = element_blank(),
       plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), units = , "cm"),
       plot.title = element_text(
-        size = 8,
+        size = 20,
         vjust = 1,
         hjust = 0.5,
         color = "black"
       ),
-      legend.text = element_text(size = 8, color = "black"),
-      legend.title = element_text(size = 8, color = "black"),
+      legend.text = element_text(size = 12, color = "black"),
+      legend.title = element_text(size = 12, color = "black"),
       legend.position = c(0.9, 0.9),
-      legend.key.size = unit(0.9, "line"),
+      legend.key.size = unit(0.7, "line"),
       legend.background = element_rect(
         color = "black",
         fill = "transparent",
@@ -106,9 +108,8 @@ mlr_measures$get("regr.smape")
 ### read in data and set parameters ####
 
 #dataset
-#samples_metrics<- read_sf(file.path(fp, "soil_samples_w_complete_metrics.fgb")) ##local
-samples_metrics<-read_rds(file.path(fp,"soil_samples_w_complete_metrics.rds"))
-samples_metrics<-dplyr::filter(samples_metrics, st_geometry_type(geometry) == "POINT")
+#samples_metrics<- read_sf(file.path(fp, "soil_samples_w_complete_metrics.rds")) ##local
+samples_metrics<-read_rds(file.path("Data/soil_samples_w_complete_metrics.rds"))
 #train_data_rm<- select(train_data, where(~!any(is.na(.))))
 #train_data_clean<- dplyr::select(samples_metrics, -c('VCI_3', 'ent_3', 'zentropy_3'))# , 'GF_3', 'VCI_3''
 
@@ -132,6 +133,7 @@ convert_to_numeric_or_factor <- function(df) {
 }
 
 converted_data <- convert_to_numeric_or_factor(train_data)
+converted_data<- select(converted_data, where(~!any(is.na(.))))
 #prep data 
 
 # Define Simulation Configurations
@@ -222,6 +224,7 @@ resamplings = rsmp("spcv_coords", folds = 3)
 design = benchmark_grid(task_list, learners, resamplings)
 bmr = progressr::with_progress(benchmark(design, store_models = TRUE))
 bmr$aggregate()
+
 
 ### extract results ####
 best_row <- bmr$aggregate()[which.min(bmr$aggregate()$regr.mse), ]
@@ -343,7 +346,7 @@ plot_sims<- function (x, xy_lim= 8) {
     ) +
     theme_beautiful()+
     theme(
-      legend.position = c(0.2, 0.80),  # bottom right inside plot area
+      legend.position = c(0.3, 0.85)
       #legend.justification = c(1, 0),   # anchor the legend box to bottom right
     )
   return(p)
@@ -397,7 +400,7 @@ v<- x|>
   filter(!learner_id == "regr.glm.fselector")
 
 plot_list <- lapply(v$nr, feature_importance)
-importance_grid_plot <- wrap_plots(plot_list, ncol = 3, nrow = 4)
+importance_grid_plot <- wrap_plots(plot_list, ncol = 2, nrow = 4)
 ggsave("Plots/grid_of_importance_scores.png", plot = importance_grid_plot, width = 20, height = 18, dpi = 300)
 
 bmr$aggregate()
@@ -406,8 +409,9 @@ TableS1<- as_tibble(bmr$aggregate())|>
   select(c(task_id, learner_id, regr.mse))
 write.csv(TableS1, "Plots/TableS1.csv")
 
-library(stringr)
+
 library(purrr)
+library(stringr)
 
 df<-x|> 
   select(c(task_id, regr.rmse, regr.mse, rRMSE))
@@ -415,24 +419,22 @@ df<-x|>
 
 
 df <- df %>%
-  dplyr::mutate(
-    # extract first number from y
-    y_index <- as.integer(gsub(".*?(\\d+).*", "\\1", df$task_id)),
+  y_index <- as.integer(gsub(".*?(\\d+).*", "\\1", df$task_id))
+
+# look up feature_suffixes safely
+feature_suffixes = map_chr(
+  y_index,
+  ~ {
+    if (is.na(.x) || .x > length(simulations)) return(NA_character_)
     
-    # look up feature_suffixes safely
-    feature_suffixes = map_chr(
-      y_index,
-      ~ {
-        if (is.na(.x) || .x > length(simulations)) return(NA_character_)
-        
-        fs <- simulations[[.x]]$feature_suffixes
-        
-        if (is.null(fs)) return(NA_character_)
-        
-        paste(fs, collapse = ", ")
-      }
-    )
-  )
+    fs <- simulations[[.x]]$feature_suffixes
+    
+    if (is.null(fs)) return(NA_character_)
+    
+    paste(fs, collapse = ", ")
+  }
+)
+
 df$feature_suffixes <- gsub("_1", "Non_canopy Structure", df$feature_suffixes)
 df$feature_suffixes <- gsub("_2", "Spaceborne Lidar", df$feature_suffixes)
 df$feature_suffixes <- gsub("_3", "Airborne Lidar", df$feature_suffixes)
