@@ -238,7 +238,7 @@ x <- bmr$aggregate(measures = c(msr("regr.rmse"), msr("regr.mse"))) %>%
 m_obs<- mean(converted_data$percC)
 x$rRMSE<- x$regr.rmse/m_obs
 xforexport<- x%>% select(-"resample_result")
-write.csv(xforexport, file.path(fp, "sims_w_measures.csv"), row.names = FALSE)
+write.csv(xforexport, file.path("Plots/sims_w_measures.csv"), row.names = FALSE)
 x <- x %>%
   arrange(regr.rmse) %>%
   mutate(task_id = factor(task_id, levels = rev(task_id)))  # reversed for top-down
@@ -308,7 +308,7 @@ df <- df[order(-df$adjusted_count), ]
 # Print the sorted table
 print(df)
 ### plots and analysis ####
-write.csv(df, file.path(fp, "variable_presence_count.csv"), row.names = FALSE)
+write.csv(df, file.path("Plots/variable_presence_count.csv"), row.names = FALSE)
 
 #autoplot(bmr$score(predictions = TRUE)$prediction_test[[x]])
 ## grid plot of truth vs response with point density hexagons

@@ -102,8 +102,8 @@ lidar_setup_ctg <- function(
 
 
 ## list all lidar files
-#las_dir<-"C:/workspace/PhD year 2/datasets/Rio_Cautario_ALS/LiDAR"
-las_dir<-"~/workspace/PhD_work/soil_chapter/orig"
+#las_dir<-"C:/workspace/PhD year 2/datasets/Rio_Cautario_ALS/LiDAR" ##local
+#las_dir<-"~/workspace/PhD_work/soil_chapter/orig" ## workstation
 file.name<- grep(list.files(path=las_dir, full.names = TRUE), pattern= '*.copc.laz', invert=TRUE, value=TRUE)
 
 ##set up and run function across all files
