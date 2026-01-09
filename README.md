@@ -24,22 +24,25 @@ Plots- where any plots resulting from the analysis were saved.
 
 ## The scripts should follow a sequence of:
 ### 1) LAI_images_to_dataframe.R 
-This script processes images taken with a hemispherical camera lens and uses the package hemispheR to convert them into dataframe of coordinates with the relative LAI, canopy openness, an
+This script processes images taken with a hemispherical camera lens and uses the package hemispheR to convert them into dataframe of coordinates with the relative canopy structure metrics. 
 
-### 2) lidar_analysis.R
-Lidar analysis script to get canopy structure metrics from airborne lidar data using lidR package  (best run on a workstation)
+### 2) soil_prelim_analysis.R 
+This script processes data from soil samples to create a dataframe for further analysis and creates some preliminary plots.  
 
-### 3) identify_rivers_raster.R
-Script to identify rivers and create the nearest distance to water raster
+### 3) lidar_analysis.R
+Lidar analysis script to get canopy structure metrics from airborne lidar data using lidR package  (best run on a workstation).
 
 ### 4) compile_rasters.R
-script to stack raster layers from GEE, QGIS, lidar_analysis and indentify_rivers_raster into one object
+script to stack raster layers from online products and lidar_analysis into one tif. 
 
-### 5) create_complete_metric_table.R
-Script to extract data from the raster stack and combine all data sets into one sf table for modelling with different lables for variables from different sources
+### 5) GEDI_via_Chewie.R
+script to download GEDI L2B data and format into a dataframe using the Chewie package. 
 
-### 6) mlr3_modular.R
-Script to automate the process of taking each combination of variables and automatically run them through a simultaneous autotuner and feature selection. Then this script runs a comparison of the best models for each variable combination. 
+### 6) create_complete_metric_table.R
+Script to extract data from the raster stack and combine all dataframes into one sf table for modelling, adding lables to indicate data categories. 
 
-### 7) v2_soil_glm.R
-This script is used for the mixed effects modelling to make an inference of the mechanistic relationships between canopy structure and soil Carbon
+### 7) mlr3_modular.R
+Script to automate the process of taking each combination of variables and automatically run them through a simultaneous autotuner and feature selection. Then this script runs a comparison of the best models for each variable combination (best run on workstation). 
+
+### 8) build_soil_glm.R
+This script is used for the mixed effects modelling to make an inference of the mechanistic relationships between canopy structure and soil Carbon.
