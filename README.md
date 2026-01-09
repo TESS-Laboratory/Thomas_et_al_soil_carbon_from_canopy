@@ -6,9 +6,9 @@ This repository contains summary data and the analytical codebase of manuscript:
 
 currently unpublished
 
-origianl data available at: [![DOI](https://zenodo.org/badge/897442306.svg)](https://doi.org/10.5281/zenodo.15005407)
+Data available at: [![DOI](https://doi.org/10.5281/zenodo.17944261)](https://doi.org/10.5281/zenodo.17944261)
 
-To investigate how soil carbon can be predicted using canopy structure metrics, this study adressed the following research questions:
+To investigate how soil carbon can be predicted using canopy structure metrics, this study addressed the following research questions:
 
 (1) How does the predictive accuracy of  soil carbon models change with different levels of data availability?  
 (2) What can we infer about the mechanistic relationships between key predictors and soil carbon?
