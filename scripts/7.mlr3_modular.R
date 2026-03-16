@@ -26,13 +26,13 @@
 #install.packages("remotes")
 #remotes::install_github("mlr-org/mlr3extralearners@*release")
 #install.packages("glmnet")
-#install.packages("kknn")
+#install.packages("stringr",repos = "https://cloud.r-project.org")
 #install.packages("raster", repos = "https://cloud.r-project.org")
 #install.packages("tidyverse", repos = "https://cloud.r-project.org")
-
+#install.packages("modelsummary")
 library(glmnet)
-library(kknn)
-library(readr)
+#library(stringr)
+library(modelsummary)
 library(mlr3extralearners)#used
 library(FSelectorRcpp)
 library(mlr3tuningspaces)
@@ -60,10 +60,11 @@ library(sf)#used
 library(patchwork)
 library(future)
 library(dplyr)#used
+library(readr)
+
 fp<- "C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Soil_manuscript_data" ##local
 #fp<- "Plots" ##workstation
-#future::plan("multisession", workers=future::availableCores()-2)
-
+#future::plan("cluster", workers = 30)
 
 ## R code for creating a bespoke theme in ggplot that makes it much easier to produce beautiful publication-quality plots.
 #### Create Plotting theme ####
@@ -108,8 +109,8 @@ mlr_measures$get("regr.smape")
 ### read in data and set parameters ####
 
 #dataset
-#samples_metrics<- read_sf(file.path(fp, "soil_samples_w_complete_metrics.rds")) ##local
-samples_metrics<-read_rds(file.path("Data/soil_samples_w_complete_metrics.rds"))
+samples_metrics<- read_rds(file.path(fp, "soil_samples_w_complete_metrics.rds")) ##local
+#samples_metrics<-read_rds(file.path("Data/soil_samples_w_complete_metrics.rds"))
 #train_data_rm<- select(train_data, where(~!any(is.na(.))))
 #train_data_clean<- dplyr::select(samples_metrics, -c('VCI_3', 'ent_3', 'zentropy_3'))# , 'GF_3', 'VCI_3''
 
@@ -238,7 +239,7 @@ x <- bmr$aggregate(measures = c(msr("regr.rmse"), msr("regr.mse"))) %>%
 m_obs<- mean(converted_data$percC)
 x$rRMSE<- x$regr.rmse/m_obs
 xforexport<- x%>% select(-"resample_result")
-write.csv(xforexport, file.path("Plots/sims_w_measures.csv"), row.names = FALSE)
+write.csv(xforexport, file.path(fp, "sims_w_measures.csv"), row.names = FALSE)
 x <- x %>%
   arrange(regr.rmse) %>%
   mutate(task_id = factor(task_id, levels = rev(task_id)))  # reversed for top-down
@@ -308,7 +309,7 @@ df <- df[order(-df$adjusted_count), ]
 # Print the sorted table
 print(df)
 ### plots and analysis ####
-write.csv(df, file.path("Plots/variable_presence_count.csv"), row.names = FALSE)
+write.csv(df, file.path(fp, "variable_presence_count.csv"), row.names = FALSE)
 
 #autoplot(bmr$score(predictions = TRUE)$prediction_test[[x]])
 ## grid plot of truth vs response with point density hexagons
@@ -325,37 +326,23 @@ plot_sims<- function (x, xy_lim= 8) {
   df<- rbind(df1, df2, df3)
   sim_id<- bmr$score(predictions = TRUE, ids = TRUE)[x*3]$task_id
   
-  # get max of x and y
-  max_xy <- round(max(
-    max(df$response, na.rm = TRUE),
-    max(df$truth, na.rm = TRUE)
-  ) / 10) * 10
-  
-  p<-  df |>
-    ggplot() +
-    aes(y = response, x = truth) +
-    geom_hex(binwidth = c(0.3, 0.3)) +
-    scale_fill_viridis_c(direction = 1, breaks = density_breaks, limits = c(1, 70)) +
+  p<-ggplot(df, aes(y = response, x = truth)) +
+    geom_point(color = "#74AAAB", alpha = 0.2) +
     geom_abline(slope = 1) +
     coord_fixed(ratio = 1, xlim = c(0, 8), ylim = c(0, 8))+
     labs(
       title = paste0(sim_id),
-      x = "Observed Carbon",
-      y = "Modelled Carbon",
-      fill = "Number of points"
+      x = "Observed SOC (%C)",
+      y = "Modelled SOC (%C)"
     ) +
-    theme_beautiful()+
-    theme(
-      legend.position = c(0.3, 0.85)
-      #legend.justification = c(1, 0),   # anchor the legend box to bottom right
-    )
+    theme_beautiful()
   return(p)
 }
 plot_list <- lapply(y, plot_sims)
-final_grid_plot <- wrap_plots(plot_list, ncol = 3, nrow = 4)
+final_grid_plot <- wrap_plots(plot_list[c(10,3,11,2,12,1)], ncol = 3, nrow = 2)
 #save
 
-ggsave("Plots/grid_of_truth_vs_response.png", plot = final_grid_plot, width = 20, height = 18, dpi = 300)
+ggsave("Plots/grid_of_truth_vs_response.png", plot = final_grid_plot, width = 15, height = 20, dpi = 300)
 
 ### importance scores for variables in each simulation
 feature_importance<- function (x, xy_lim= 8) {
@@ -400,7 +387,7 @@ v<- x|>
   filter(!learner_id == "regr.glm.fselector")
 
 plot_list <- lapply(v$nr, feature_importance)
-importance_grid_plot <- wrap_plots(plot_list, ncol = 2, nrow = 4)
+importance_grid_plot <- wrap_plots(plot_list, ncol = 3, nrow = 4)
 ggsave("Plots/grid_of_importance_scores.png", plot = importance_grid_plot, width = 20, height = 18, dpi = 300)
 
 bmr$aggregate()
@@ -446,3 +433,24 @@ TableS2<- df|>
   rename("Data Categories" = feature_suffixes)
 
 write.csv(TableS2, "Plots/TableS2.csv")
+
+########## hex plot 
+p<-  df |>
+  ggplot() +
+  aes(y = response, x = truth) +
+  geom_hex(binwidth = c(0.3, 0.3)) +
+  scale_fill_viridis_c(direction = 1, breaks = density_breaks, limits = c(1, 30)) +
+  geom_abline(slope = 1) +
+  coord_fixed(ratio = 1, xlim = c(0, 8), ylim = c(0, 8))+
+  labs(
+    title = paste0(sim_id),
+    x = "Observed SOC (%C)",
+    y = "Modelled SOC (%C)",
+    fill = "Number of points"
+  ) +
+  theme_beautiful()+
+  theme(
+    legend.position = c(0.3, 0.85)
+    #legend.justification = c(1, 0),   # anchor the legend box to bottom right
+  )
+return(p)

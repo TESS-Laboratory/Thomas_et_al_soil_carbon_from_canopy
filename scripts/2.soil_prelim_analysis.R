@@ -304,3 +304,66 @@ print(line_plots_combined)
 
 # Print linear model summaries
 lapply(line_plots_LAI, function(x) print(x$model_summary))
+
+
+
+################ bulk density analysis ##############
+df<- read_csv(file.path(fp, "soil_meta_table.csv"))
+filter_values <- c("0-5","5-10","10-20","20-30")
+
+density_table<- df|>
+  select(c("Codigo_5","Ponto_5" , "Profundidade (cm)_5",  "%C_5", plot.x_4, plot.y_4))|>
+  rename("deapth" = "Profundidade (cm)_5",
+         "percC" = "%C_5")|>
+  filter(deapth %in% filter_values)|>
+  mutate(weight = case_when(
+    deapth == "0-5" ~ 1,
+    deapth =="5-10" ~ 1,
+    deapth == "10-20" ~ 2,
+    deapth == "20-30" ~2
+  ),
+  stockC = case_when(
+    deapth == "0-5" ~ (percC/100)*1.52,
+    deapth =="5-10" ~ (percC/100)*1.52,
+    deapth == "10-20" ~ (percC/100)*1.52,
+    deapth == "20-30" ~(percC/100)*1.56
+  ))
+density_table<-density_table|>
+  mutate(stockMgHa = stockC*100*(weight*5)
+ )|>
+  mutate(plot.x_4 = case_when(
+    Ponto_5 == "P94.pit" ~ -64.10750,
+    Ponto_5 =="P95.pit" ~ -64.16335,
+    Ponto_5 == "P93.pit" ~ -64.10779,
+    Ponto_5 == "P65.pit" ~-64.13680,
+    Ponto_5 == "P62.pit" ~-64.14117,
+    Ponto_5 == "P96NFR.pit" ~-64.194687151, 
+    TRUE ~ plot.x_4),
+    plot.y_4 = case_when(
+      Ponto_5 == "P94.pit" ~ -11.92798,
+      Ponto_5 =="P95.pit" ~ -11.91902,
+      Ponto_5 == "P93.pit" ~ -11.92830,
+      Ponto_5 == "P65.pit" ~-11.95360,
+      Ponto_5 == "P62.pit" ~-11.96112,
+      Ponto_5 == "P96NFR.pit" ~-11.8909476405,
+      TRUE ~ plot.y_4))|>
+  drop_na()
+
+pit_table<- read_csv(file.path(fp, "density_w_carbon.csv"))
+study_site <- st_read("C:/Users/jpt215/OneDrive - University of Exeter/PhD_Data/Rio_Cautario/RC_boundary_EPSG4326/RC_boundary_EPSG4326.shp", crs =st_crs("EPSG:4326"))
+
+density_sf<-sf::st_as_sf(density_table, coords = c("plot.x_4", "plot.y_4"), crs =st_crs("EPSG:4326"))  
+pit_sf<-sf::st_as_sf(pit_table, coords = c("plot.x", "plot.y"), crs =st_crs("EPSG:4326")) 
+prj<- sf::st_crs(density_sf)
+
+x_sf <- st_transform(study_site$geometry, crs = st_crs(prj))
+ggplot(pit_sf) +
+  geom_sf(aes(color = Mg_C_Ha), size = 3) +
+  scale_color_viridis_c() +
+  theme_minimal() +
+  labs(
+    color = "Mg C Ha-1"
+  )+
+  geom_sf(data = density_sf, color = "black", size = 0.75) +
+  geom_sf(data = study_site, fill = NA, color = "red", size = 0.5) + # Outline in red+
+  facet_wrap(~ depth, ncol = 2)

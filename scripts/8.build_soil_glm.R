@@ -1,13 +1,13 @@
 ## A script to use GLMs to model and analyse the mechanistic effects of canopy structure on Soil C
 
 #### set up environment ####
-install.packages("readr")
-install.packages("ggrepel")
-install.packages("broom")
-install.packages("ggeffects")
-install.packages("sjPlot")
-install.packages("modelsummary")
-install.packages("pandoc")
+#install.packages("readr")
+#install.packages("ggrepel")
+#install.packages("broom")
+#install.packages("ggeffects")
+#install.packages("sjPlot")
+#install.packages("modelsummary")
+#install.packages("pandoc")
 #install.packages("factoextra")
 library(factoextra)
 library(performance)
@@ -304,6 +304,8 @@ write.csv(TableS3, "Plots/TableS3.csv")
 # Perform automated backward selection
 best_model <- step(glm_model, direction = "backward")
 
+
+m<- broom::augment(best_model, type.predict = "response")
 #View the summary of the best model
 summary(best_model)
 check_model(best_model)
@@ -339,7 +341,7 @@ effect_plot<-ggplot(coef_df, aes(x = estimate, y = reorder(term, estimate))) +
   ) +
   scale_x_log10() +
   labs(
-    x = "Multiplicative effect on percC (log scale)",
+    x = "Multiplicative effect on SOC (%) ",
     y = NULL,
     title = "Effect sizes from Gamma(log) model",
     subtitle = "Points show exp(coef); bars are 95% confidence intervals"
@@ -399,19 +401,19 @@ TableS5<-tidy(simple_glm, exponentiate = TRUE)
 write.csv(TableS5, "Plots/TableS5.csv")
 
 p5<-plot(predict_response(best_model, terms= "zsd_3")) +
-  labs( title = "a)" , x= "Standard Deviation of Canopy Height", y= "Mean %C")+
+  labs( title = "a)" , x= "Standard Deviation of Canopy Height", y= "SOC (%)")+
   theme_minimal(base_size = 24)
 p6<-plot(predict_response(best_model, terms= "zskew_3")) +
-  labs( title = "b)" , x= "Skew of Canopy Height", y= "Mean %C")+
+  labs( title = "b)" , x= "Skew of Canopy Height", y= "SOC (%)")+
   theme_minimal(base_size = 24)
 p7<-plot(predict_response(best_model, terms= "isd_3")) +
-  labs( title = "c)" , x= "Standard Deviation of Lidar Return Intensity", y= "Mean %C")+
+  labs( title = "c)" , x= "Standard Deviation of Lidar Return Intensity", y= "SOC (%)")+
   theme_minimal(base_size = 24)
 p8<-plot(predict_response(best_model, terms= "zkurt_3")) +
-  labs( title = "d)" , x= "Kurtosis of Canopy Height Distribution", y= "Mean %C")+
+  labs( title = "d)" , x= "Kurtosis of Canopy Height Distribution", y= "SOC (%)")+
   theme_minimal(base_size = 24)
 p9<-plot(predict_response(best_model, terms= "p1th_3")) +
-  labs( title = "e)" , x= "Percentage 1st Returns", y= "Mean %C")+
+  labs( title = "e)" , x= "Percentage 1st Returns", y= "SOC (%)")+
   theme_minimal(base_size = 24)
 
 p<- (p5+p6 )/(p7 +p8)/( p9)
@@ -419,3 +421,16 @@ p<- (p5+p6 )/(p7 +p8)/( p9)
 p
 ggsave('plots/marginal_effects.png', p, width = 20, height = 18, dpi = 300)
 
+density_glm <-glm(formula = percC_5 ~ zsd_3 + zskew_3 + zkurt_3  + isd_3  + ent_3,
+                 family = Gamma(link = "log"), data = df_means)
+tidy(density_glm, exponentiate = TRUE)
+p10<-plot(predict_response(density_glm, terms= "ent_3")) +
+  labs(title = NULL, x= "Entopy", y= "Mean %C")+
+  theme_minimal(base_size = 24)
+p10
+
+
+############# diagnostics #########
+plot(best_model) ##resid vs fitted in GLM  looks pretty evenly distributed
+l<- filter(samples_metrics, percC_5 <4 & percC_5> 2) # = 57 obs
+prop_of_obs<- 57/128*100 ## 45%
